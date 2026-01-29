@@ -103,7 +103,7 @@ macro(add_plugin_test plugin_name test_files)
 endmacro()
 
 # PLUGIN_WAREHOUSE
-set (WAREHOUSE_INC ${CMAKE_SOURCE_DIR}/../entservices-deviceanddisplay/Warehouse ${CMAKE_SOURCE_DIR}/../entservices-deviceanddisplay/helpers)
+set (WAREHOUSE_INC ${CMAKE_SOURCE_DIR}/../entservices-warehouse/plugin ${CMAKE_SOURCE_DIR}/../entservices-warehouse/helpers)
 set (WAREHOUSE_LIBS ${NAMESPACE}Warehouse ${NAMESPACE}WarehouseImplementation)
 add_plugin_test_ex(PLUGIN_WAREHOUSE tests/test_Warehouse.cpp "${WAREHOUSE_INC}" "${WAREHOUSE_LIBS}")
 
