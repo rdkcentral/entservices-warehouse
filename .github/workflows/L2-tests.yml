@@ -215,8 +215,10 @@ jobs:
           rdk/iarmbus/libIBusDaemon.h
           rdk/iarmmgrs-hal/sysMgr.h
           secure_wrapper.h
+          drm.h
+          drm_mode.h
           &&
-          cp -r /usr/include/glib-2.0/* /usr/lib/x86_64-linux-gnu/glib-2.0/include/* .
+          cp -r /usr/include/gstreamer-1.0/gst /usr/include/glib-2.0/* /usr/lib/x86_64-linux-gnu/glib-2.0/include/* /usr/include/libdrm/drm.h /usr/include/libdrm/drm_mode.h .
 
       - name: Set clang toolchain
         if: ${{ matrix.compiler == 'clang' }}
