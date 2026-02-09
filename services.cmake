@@ -32,7 +32,6 @@ add_definitions (-DUSE_IARMBUS)
 add_definitions (-DUSE_TR_69)
 
 add_definitions (-DHAS_API_SYSTEM)
-add_definitions(-DRDK_LOG_MILESTONE)
 
 add_definitions (-DUSE_DS)
 
@@ -66,12 +65,6 @@ endif()
 if (BUILD_ENABLE_TELEMETRY_LOGGING)
     message("Building with telemetry logging")
     add_definitions (-DENABLE_TELEMETRY_LOGGING)
-endif()
-
-add_definitions (-DENABLE_DEEP_SLEEP)
-
-if(NET_DISABLE_NETSRVMGR_CHECK)
-    add_definitions (-DNET_DISABLE_NETSRVMGR_CHECK)
 endif()
 
 if (ENABLE_RFC_MANAGER)
