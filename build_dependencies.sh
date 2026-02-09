@@ -149,6 +149,7 @@ touch pkg.h
 touch wpa_ctrl.h
 touch proc/readproc.h
 touch dsFPD.h
+touch secure_wrapper.h
 echo "files created successfully"
 echo "======================================================================================"
 
