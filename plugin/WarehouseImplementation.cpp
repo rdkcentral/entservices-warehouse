@@ -110,6 +110,7 @@ namespace WPEFramework
         _adminLock() 
         {
             LOGINFO("Create WarehouseImplementation Instance");
+            printf("Test coverity flow: %s\n");
 
             WarehouseImplementation::_instance = this;
             InitializeIARM();
