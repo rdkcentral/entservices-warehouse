@@ -91,6 +91,7 @@ bool isFileExistsAndOlderThen(const char* pFileName, long age = -1)
     if (-1 == age)
         return true;
 
+    // Coverity Fix: ID 598, 599 - Y2038: time_t and difftime usage for file age calculation
     time_t currentTime = time(nullptr);
 
     time_t modifiedSecondsAgo = difftime(currentTime, fileStat.st_mtime);
@@ -381,7 +382,8 @@ namespace WPEFramework
                 bool ok = return_value == 0;
                 successErr.success = ok;
                 if (!ok)
-                    successErr.error = error;
+                    // Coverity Fix: ID 68 - COPY_INSTEAD_OF_MOVE: Use std::move for assignment
+                    successErr.error = std::move(error);
 #else
                 response[PARAM_SUCCESS] = false;
                 successErr.error = "No IARMBUS";
@@ -490,24 +492,27 @@ namespace WPEFramework
                             std::string s = path.substr(last, next - last);
                             Utils::String::trim(s);
                             if (s.length() > 0)
-                                exclusions.push_back(s);
+                                // Coverity Fix: IDs 69-70 - COPY_INSTEAD_OF_MOVE: Use std::move when adding to vector
+                                exclusions.push_back(std::move(s));
                             last = next + 1;
                         }
                         std::string s = path.substr(last, next - last);
                         Utils::String::trim(s);
                         if (s.length() > 0)
-                            exclusions.push_back(s);
+                            exclusions.push_back(std::move(s));
                         path = exclusions.front();
                     }
 
                     // allow search recursively if path ends by '/*[|...]', otherwise, for cases like /*.ini, searching process will be done only by given path
                     std::string result;
-                    const char* input =  path.c_str();
+                    // Coverity Fix: ID 532 - PW.PARAMETER_HIDDEN: Renamed to avoid shadowing parameter
+                    const char* inputStr =  path.c_str();
                     const char* filePath = "/etc/device.properties";
                     std::string inputPath = path;
 
-                    bool success = Utils::ExpandPropertiesInString(input, filePath, inputPath);
-                    if(!success)
+                    // Coverity Fix: ID 532 - PW.PARAMETER_HIDDEN: Renamed local variable to avoid hiding function parameter
+                    bool expandSuccess = Utils::ExpandPropertiesInString(inputStr, filePath, inputPath);
+                    if(!expandSuccess)
                     {
                         LOGERR("Path String Expansion failed.\n");
                     }
@@ -663,7 +668,8 @@ namespace WPEFramework
             else
             {
                 LOGERR("lightReset failed. %s", error.c_str());
-                successErr.error = error;
+                // Coverity Fix: ID 71 - COPY_INSTEAD_OF_MOVE: Use std::move for assignment
+                successErr.error = std::move(error);
             }
 #else
             LOGERR("lightReset failed: No IARMBUS");
