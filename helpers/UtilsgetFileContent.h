@@ -70,7 +70,8 @@ inline bool readPropertyFromFile(const char* filename, const string& property, s
                 else
                 {
                     // If it does not start with '$', set propertyValue directly
-                    propertyValue = propertyContent;
+                    // Coverity Fix: ID 72 - COPY_INSTEAD_OF_MOVE: Use std::move for assignment
+                    propertyValue = std::move(propertyContent);
                     if (!propertyValue.empty())
                     {
                         // Remove new line character from end of the string if it exists
@@ -175,7 +176,8 @@ inline bool searchFilesRec(std::vector<std::string> &pathList, unsigned int curr
             return false;
         }
 
-        std::string pattern_s = currentPath;
+        // Coverity Fix: ID 73 - COPY_INSTEAD_OF_MOVE: Use std::move for assignment
+        std::string pattern_s = std::move(currentPath);
         size_t pos = 0;
         while ((pos = pattern_s.find('*', pos)) != std::string::npos)
         {
@@ -221,7 +223,8 @@ inline bool searchFilesRec(std::vector<std::string> &pathList, unsigned int curr
                     }
                     else
                     {
-                        pathList[currentDepth] = fileName;
+                        // Coverity Fix: ID 74 - COPY_INSTEAD_OF_MOVE: Use std::move for assignment
+                        pathList[currentDepth] = std::move(fileName);
                         searchFilesRec(pathList, currentDepth + 1, exclusions, result);
                     }
                 }
@@ -292,9 +295,9 @@ inline bool ExpandPropertiesInString(const char* input, const char* filePath, st
             string tempPropertyValue;
             if (readPropertyFromFile(filePath, variable, tempPropertyValue))
             {
-                const char* propertyValue = tempPropertyValue.c_str();
+                //const char* propertyValue = tempPropertyValue.c_str();
                 expandedString += tempPropertyValue;
-                variablePos += strlen(propertyValue);
+                // Coverity Fix: ID 593 - Unused value: Remove unused assignment to variablePos
             }
             else
             {
