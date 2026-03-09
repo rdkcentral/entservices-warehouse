@@ -62,6 +62,7 @@
 #define FRONT_PANEL_FAILED 3
 #define FRONT_PANEL_INTERVAL 5000
 
+
 static const char WAREHOUSE_RESET_FLAG_FILE[] = "/opt/.rebootFlag";
 static const int READ_BUFFER_SZ = 1024;
 static const int MAX_LOG_SIZE = 128;
