@@ -17,6 +17,7 @@
 * limitations under the License.
 **/
 
+
 #include "WarehouseImplementation.h"
 
 #include <algorithm>
