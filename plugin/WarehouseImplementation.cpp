@@ -17,6 +17,7 @@
 * limitations under the License.
 **/
 
+
 #include "WarehouseImplementation.h"
 
 #include <algorithm>
@@ -61,6 +62,7 @@
 #define FRONT_PANEL_INPROGRESS 1
 #define FRONT_PANEL_FAILED 3
 #define FRONT_PANEL_INTERVAL 5000
+
 
 static const char WAREHOUSE_RESET_FLAG_FILE[] = "/opt/.rebootFlag";
 static const int READ_BUFFER_SZ = 1024;
