@@ -33,7 +33,7 @@ set (TEST_LIB
     ${NAMESPACE}Plugins::${NAMESPACE}Plugins
 )
 
-set (TEST_INC ../../helpers)
+set (TEST_INC)
 
 #########################################################################################
 # add_plugin_test_ex: Macro to add plugin tests, it will append to TEST_SRC, TEST_INC,
@@ -103,7 +103,7 @@ macro(add_plugin_test plugin_name test_files)
 endmacro()
 
 # PLUGIN_WAREHOUSE
-set (WAREHOUSE_INC ${CMAKE_SOURCE_DIR}/../entservices-warehouse/plugin ${CMAKE_SOURCE_DIR}/../entservices-warehouse/helpers)
+set (WAREHOUSE_INC ${CMAKE_SOURCE_DIR}/../entservices-warehouse/plugin ${CMAKE_SOURCE_DIR}/../entservices-helpers/helpers)
 set (WAREHOUSE_LIBS ${NAMESPACE}Warehouse ${NAMESPACE}WarehouseImplementation)
 add_plugin_test_ex(PLUGIN_WAREHOUSE tests/test_Warehouse.cpp "${WAREHOUSE_INC}" "${WAREHOUSE_LIBS}")
 
