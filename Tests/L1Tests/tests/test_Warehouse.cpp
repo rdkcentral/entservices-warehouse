@@ -27,7 +27,6 @@
 #include "FactoriesImplementation.h"
 #include "IarmBusMock.h"
 #include "ServiceMock.h"
-#include "RfcApiMock.h"
 #include "WrapsMock.h"
 #include "secure_wrappermock.h"
 #include "ThunderPortability.h"
@@ -73,7 +72,6 @@ protected:
 class WarehouseInitializedTest : public WarehouseTest {
 protected:
     IarmBusImplMock   *p_iarmBusImplMock = nullptr;
-    RfcApiImplMock    *p_rfcApiImplMock  = nullptr;
     WrapsImplMock     *p_wrapsImplMock   = nullptr;
     WarehouseMock     *p_warehouseMock   = nullptr;
     ServiceMock       *p_serviceMock     = nullptr;
@@ -83,9 +81,6 @@ protected:
     {
         p_iarmBusImplMock = new NiceMock<IarmBusImplMock>;
         IarmBus::setImpl(p_iarmBusImplMock);
-
-        p_rfcApiImplMock = new NiceMock<RfcApiImplMock>;
-        RfcApi::setImpl(p_rfcApiImplMock);
 
         p_serviceMock = new NiceMock<ServiceMock>;
 
@@ -130,12 +125,6 @@ protected:
             p_iarmBusImplMock = nullptr;
         }
 
-        RfcApi::setImpl(nullptr);
-        if (p_rfcApiImplMock != nullptr) {
-            delete p_rfcApiImplMock;
-            p_rfcApiImplMock = nullptr;
-        }
-
         Wraps::setImpl(nullptr);
         if (p_wrapsImplMock != nullptr) {
             delete p_wrapsImplMock;
@@ -151,8 +140,6 @@ TEST_F(WarehouseInitializedTest, registeredMethods)
     EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("internalReset")));
     EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("lightReset")));
     EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("isClean")));
-    EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("executeHardwareTest")));
-    EXPECT_EQ(Core::ERROR_NONE, handler.Exists(_T("getHardwareTestResults")));
 }
 
 TEST_F(WarehouseInitializedTest, ColdFactoryResetDevice)
@@ -418,59 +405,6 @@ TEST_F(WarehouseInitializedTest, isClean)
 
     fileConf.Destroy();
     filePref.Destroy();
-}
-
-TEST_F(WarehouseInitializedTest, executeHardwareTest)
-{
-    EXPECT_CALL(*p_rfcApiImplMock, setRFCParameter(::testing::_, ::testing::_, ::testing::_, ::testing::_))
-        .Times(2)
-        .WillOnce(::testing::Invoke(
-            [](char* pcCallerID, const char* pcParameterName, const char* pcParameterValue, DATA_TYPE eDataType) {
-                EXPECT_EQ(string(pcCallerID), _T("Warehouse"));
-                EXPECT_EQ(string(pcParameterName), _T("Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.hwHealthTest.Enable"));
-                EXPECT_EQ(string(pcParameterValue), _T("true"));
-                EXPECT_EQ(eDataType, WDMP_BOOLEAN);
-                return WDMP_SUCCESS;
-            }))
-        .WillOnce(::testing::Invoke(
-            [](char* pcCallerID, const char* pcParameterName, const char* pcParameterValue, DATA_TYPE eDataType) {
-                EXPECT_EQ(string(pcCallerID), _T("Warehouse"));
-                EXPECT_EQ(string(pcParameterName), _T("Device.DeviceInfo.X_RDKCENTRAL-COM_xOpsDeviceMgmt.hwHealthTest.ExecuteTest"));
-                EXPECT_EQ(string(pcParameterValue), _T("1"));
-                EXPECT_EQ(eDataType, WDMP_INT);
-                return WDMP_SUCCESS;
-            }));
-
-    // Invoke executeHardwareTest
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("executeHardwareTest"), _T("{}"), response));
-    EXPECT_EQ(response, _T("{\"success\":true}"));
-}
-
-TEST_F(WarehouseInitializedTest, getHardwareTestResults)
-{
-    EXPECT_CALL(*p_rfcApiImplMock, getRFCParameter(::testing::_, ::testing::_, ::testing::_))
-        .Times(1)
-        .WillOnce(::testing::Invoke(
-            [](char* pcCallerID, const char* pcParameterName, RFC_ParamData_t* pstParamData) {
-                EXPECT_EQ(string(pcCallerID), string("Warehouse"));
-                EXPECT_EQ(string(pcParameterName), string("Device.DeviceInfo.X_RDKCENTRAL-COM_xOpsDeviceMgmt.hwHealthTest.Results"));
-                strncpy(pstParamData->value, "test", sizeof(pstParamData->value));
-                return WDMP_SUCCESS;
-            }));
-    EXPECT_CALL(*p_rfcApiImplMock, setRFCParameter(::testing::_, ::testing::_, ::testing::_, ::testing::_))
-        .Times(1)
-        .WillOnce(::testing::Invoke(
-            [](char* pcCallerID, const char* pcParameterName, const char* pcParameterValue, DATA_TYPE eDataType) {
-                EXPECT_EQ(string(pcCallerID), _T("Warehouse"));
-                EXPECT_EQ(string(pcParameterName), _T("Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.hwHealthTest.Enable"));
-                EXPECT_EQ(string(pcParameterValue), _T("false"));
-                EXPECT_EQ(eDataType, WDMP_BOOLEAN);
-                return WDMP_SUCCESS;
-            }));
-
-    // Invoke getHardwareTestResults
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("getHardwareTestResults"), _T("{}"), response));
-    EXPECT_EQ(response, _T("{\"success\":true,\"testResults\":\"test\"}"));
 }
 
 extern "C" FILE* __real_popen(const char* command, const char* type);

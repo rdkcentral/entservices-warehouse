@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Warehouse plugin is a WPEFramework (Thunder) service plugin that provides device warehouse management capabilities for RDK-based devices. It enables factory reset operations, device state verification, hardware testing, and warehouse mode operations essential for device provisioning, maintenance, and return-to-factory scenarios.
+The Warehouse plugin is a WPEFramework (Thunder) service plugin that provides device warehouse management capabilities for RDK-based devices. It enables factory reset operations, device state verification, and warehouse mode operations essential for device provisioning, maintenance, and return-to-factory scenarios.
 
 ## System Architecture
 
@@ -60,8 +60,6 @@ The core business logic layer provides:
 
 **Device State Management**:
 - `IsClean()`: Verifies device cleanliness by checking for residual files
-- `ExecuteHardwareTest()`: Initiates hardware validation tests
-- `GetHardwareTestResults()`: Retrieves hardware test status and results
 
 **IARM Integration**:
 - Listens to Device Settings warehouse operation status events
@@ -110,20 +108,6 @@ Client Request → JSON-RPC → Warehouse Plugin → WarehouseImplementation
                                           ResetDone Event
                                                        ↓
                                           Client Notification
-```
-
-### Hardware Test Flow
-
-```
-Client → ExecuteHardwareTest() → RFC Configuration Check
-                                         ↓
-                                  Initiate Test via RFC
-                                         ↓
-                                  Return Immediate Success
-                                         
-Client → GetHardwareTestResults() → Query RFC Results
-                                         ↓
-                                  Return Test Status
 ```
 
 ## Plugin Framework Integration
@@ -176,7 +160,6 @@ The plugin architecture supports extension through:
 - Additional reset types via resetType parameter
 - Pluggable notification handlers via INotification interface
 - RFC-based feature enablement without code changes
-- Custom hardware test implementations
 
 ## Performance Considerations
 

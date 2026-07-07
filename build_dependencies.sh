@@ -55,7 +55,7 @@ cd ..
 git clone --branch develop https://github.com/rdkcentral/entservices-helpers.git
 cd "$GITHUB_WORKSPACE"
 
-git clone --branch 1.0.14 https://github.com/rdkcentral/entservices-testframework.git
+git clone --branch 1.0.19 https://github.com/rdkcentral/entservices-testframework.git
 
 ############################
 # Build Thunder-Tools
@@ -188,7 +188,6 @@ touch rdk/iarmmgrs-hal/deepSleepMgr.h
 touch rdk/iarmmgrs-hal/mfrMgr.h
 touch rdk/iarmmgrs-hal/sysMgr.h
 touch libudev.h
-touch rfcapi.h
 touch rbus.h
 touch telemetry_busmessage_sender.h
 touch maintenanceMGR.h
