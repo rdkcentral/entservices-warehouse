@@ -7,9 +7,6 @@ on:
         description: "Specifies the source type (e.g., local or test framework) for the workflow."
         required: true
         type: string
-    secrets:
-      RDKCM_RDKE:
-        required: true
 
 env:
   BUILD_TYPE: Debug
@@ -124,7 +121,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: 1.0.14
+          ref: 1.0.19
 
       - name: Checkout entservices-warehouse
         if: ${{ inputs.caller_source == 'local' }}
@@ -205,7 +202,6 @@ jobs:
           repository: rdkcentral/entservices-apis
           path: entservices-apis
           ref: ${{env.INTERFACES_REF}}
-          #token : ${{ secrets.RDKCM_RDKE }}
           run: rm -rf $GITHUB_WORKSPACE/entservices-apis/jsonrpc/DTV.json
 
       - name: Apply patches entservices-apis
@@ -284,7 +280,6 @@ jobs:
           network/netsrvmgrIarm.h
           edid-parser.hpp
           libudev.h
-          rfcapi.h
           rbus.h
           drm.h
           drm_mode.h
