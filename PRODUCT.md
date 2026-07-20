@@ -19,13 +19,7 @@ The Warehouse plugin is a critical enterprise service for RDK (Reference Design 
 - **Comprehensive Scanning**: Check multiple partitions and critical directories
 - **Detailed Reporting**: Return list of files preventing clean state certification
 
-### 3. Hardware Testing Integration
-- **On-Demand Test Execution**: Trigger hardware validation tests remotely
-- **Results Retrieval**: Query detailed hardware test results and status
-- **RFC-Based Control**: Dynamic test enablement through Remote Feature Control
-- **Automated Validation**: Pre-shipment and post-repair verification
-
-### 4. Operational Flexibility
+### 3. Operational Flexibility
 - **Reboot Suppression**: Option to defer reboot for batch operations
 - **Asynchronous Operations**: Non-blocking reset execution with event notifications
 - **Front Panel Feedback**: Visual status indication via LED displays
@@ -35,7 +29,6 @@ The Warehouse plugin is a critical enterprise service for RDK (Reference Design 
 
 ### Manufacturing and Provisioning
 **Scenario**: Device first-time setup and quality assurance
-- Execute hardware tests to validate device functionality
 - Verify clean state before initial provisioning
 - Perform warehouse reset to prepare for customer setup
 - Ensure compliance with manufacturing standards
@@ -49,7 +42,6 @@ The Warehouse plugin is a critical enterprise service for RDK (Reference Design 
 **Scenario**: Customer returns and device refurbishment
 - Light reset to remove customer data while preserving diagnostics
 - Validate complete data removal for privacy compliance
-- Re-certify device hardware through testing
 - Restore to known-good factory state for resale
 
 **Benefits**:
@@ -106,14 +98,6 @@ lightReset()
 // Check device cleanliness
 isClean(age: int)
 → Returns: {clean: bool, files: string[], success: bool, error: string}
-
-// Execute hardware validation
-executeHardwareTest()
-→ Returns: {success: bool}
-
-// Retrieve test results
-getHardwareTestResults()
-→ Returns: {success: bool, results: string}
 ```
 
 ### Event Notifications
@@ -172,7 +156,6 @@ onResetDone(success: bool, error: string)
 - **Light Reset**: 30-60 seconds typical
 - **Full Factory Reset**: 2-5 minutes depending on storage size
 - **IsClean Check**: 5-15 seconds for standard devices
-- **Hardware Tests**: 1-10 minutes based on test scope
 
 ## Compatibility
 
@@ -216,7 +199,6 @@ The plugin maintains API compatibility across minor versions, with deprecation n
 
 Planned enhancements include:
 - Cloud-based orchestration for remote warehouse operations
-- Enhanced hardware test reporting with telemetry integration
 - Encrypted backup/restore during reset operations
 - Network-based device imaging capabilities
 - Integration with predictive maintenance systems

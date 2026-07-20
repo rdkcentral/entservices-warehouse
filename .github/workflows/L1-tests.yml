@@ -121,7 +121,7 @@ jobs:
         with:
           repository: rdkcentral/entservices-testframework
           path: entservices-testframework
-          ref: 1.0.14
+          ref: 1.0.19
 
       - name: Checkout entservices-warehouse
         if: ${{ inputs.caller_source == 'local' }}
@@ -280,7 +280,6 @@ jobs:
           network/netsrvmgrIarm.h
           edid-parser.hpp
           libudev.h
-          rfcapi.h
           rbus.h
           drm.h
           drm_mode.h

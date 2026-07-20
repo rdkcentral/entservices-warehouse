@@ -37,16 +37,9 @@
 #include "UtilsString.h"
 #include "UtilsfileExists.h"
 #include "UtilsgetFileContent.h"
-
-#include "rfcapi.h"
-
-#define WAREHOUSE_RFC_CALLERID                  "Warehouse"
 #define WAREHOUSE_HOSTCLIENT_NAME1_RFC_PARAM    "Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.CommonProperties.WarehouseHost.CName1"
 #define WAREHOUSE_HOSTCLIENT_NAME2_RFC_PARAM    "Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.CommonProperties.WarehouseHost.CName2"
 #define WAREHOUSE_HOSTCLIENT_TAIL_RFC_PARAM     "Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.CommonProperties.WarehouseHost.CNameTail"
-#define WAREHOUSE_HWHEALTH_ENABLE_RFC_PARAM     "Device.DeviceInfo.X_RDKCENTRAL-COM_RFC.Feature.hwHealthTest.Enable"
-#define WAREHOUSE_HWHEALTH_EXECUTE_RFC_PARAM    "Device.DeviceInfo.X_RDKCENTRAL-COM_xOpsDeviceMgmt.hwHealthTest.ExecuteTest"
-#define WAREHOUSE_HWHEALTH_RESULTS_RFC_PARAM    "Device.DeviceInfo.X_RDKCENTRAL-COM_xOpsDeviceMgmt.hwHealthTest.Results"
 
 #define HOSTS_FILE "/etc/warehouseHosts.conf"
 
@@ -290,54 +283,6 @@ namespace WPEFramework
             }
         }
 #endif
-        
-        Core::hresult WarehouseImplementation::ExecuteHardwareTest(WarehouseSuccess& success)
-        {
-            LOGINFO("");
-            bool result = false;
-
-            WDMP_STATUS wdmpStatus;
-
-            wdmpStatus = setRFCParameter((char *)WAREHOUSE_RFC_CALLERID, WAREHOUSE_HWHEALTH_ENABLE_RFC_PARAM, "true", WDMP_BOOLEAN);
-            result = (wdmpStatus == WDMP_SUCCESS);
-            if (result)
-            {
-                wdmpStatus = setRFCParameter((char *)WAREHOUSE_RFC_CALLERID, WAREHOUSE_HWHEALTH_EXECUTE_RFC_PARAM, "1", WDMP_INT);
-                result = (wdmpStatus == WDMP_SUCCESS);
-            }
-            if (!result)
-            {
-                LOGERR("%s", getRFCErrorString(wdmpStatus));
-            }
-
-            success.success = result;
-            return Core::ERROR_NONE;
-        }
-        
-        Core::hresult WarehouseImplementation::GetHardwareTestResults(bool& success, string& testResults)
-        {
-            LOGINFO("");
-            bool result = false;
-
-            WDMP_STATUS wdmpStatus;
-            RFC_ParamData_t param = {0};
-
-            wdmpStatus = getRFCParameter((char *)WAREHOUSE_RFC_CALLERID, WAREHOUSE_HWHEALTH_RESULTS_RFC_PARAM, &param);
-            result = (wdmpStatus == WDMP_SUCCESS);
-            if (result)
-            {
-                testResults = param.value;
-                wdmpStatus = setRFCParameter((char *)WAREHOUSE_RFC_CALLERID, WAREHOUSE_HWHEALTH_ENABLE_RFC_PARAM, "false", WDMP_BOOLEAN);
-                result = (wdmpStatus == WDMP_SUCCESS);
-            }
-            if (!result)
-            {
-                LOGERR("%s", getRFCErrorString(wdmpStatus));
-            }
-
-            success = result;
-            return Core::ERROR_NONE;
-        }
         
         Core::hresult WarehouseImplementation::InternalReset(const string& passPhrase, WarehouseSuccessErr& successErr)
         {
