@@ -603,7 +603,11 @@ namespace WPEFramework
             int return_value = v_secure_system("sh -c 'rm -rf " LIGHT_RESET_SCRIPT "'");
             bool ok = return_value == 0;
 
-            (void)remove("/opt/secure/persistent/rdkservicestore");
+            //coverity fix: CHECKED_RETURN - check return value and log if removal fails
+            if (remove("/opt/secure/persistent/rdkservicestore") != 0)
+            {
+                LOGWARN("Failed to remove /opt/secure/persistent/rdkservicestore");
+            }
 
             successErr.success = ok;
             if (ok)
