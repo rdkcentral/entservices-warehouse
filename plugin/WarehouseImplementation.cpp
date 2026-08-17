@@ -548,62 +548,72 @@ namespace WPEFramework
 
             std::string script(LIGHT_RESET_SCRIPT);
             regex_t rx;
-            regcomp(&rx, "(\\s+)([A-Z_][0-9A-Z_]*)(\\S*)", REG_EXTENDED);
-            regmatch_t rm[4];
-
-            int pos = 0;
-            while (regexec(&rx, script.c_str() + pos, 4, rm, 0) == REG_NOERROR)
+            int regcomp_result = regcomp(&rx, "(\\s+)([A-Z_][0-9A-Z_]*)(\\S*)", REG_EXTENDED);
+            if (regcomp_result != 0)
             {
-                std::string var = script.substr(pos + rm[2].rm_so, rm[2].rm_eo - rm[2].rm_so);
-                std::string replace;
-                const char *envVar = getenv(var.c_str());
-                string scmp;
+                LOGERR("regcomp failed with error code %d", regcomp_result);
+            }
+            else
+            {
+                regmatch_t rm[4];
 
-                if ("SD_CARD_MOUNT_PATH" == var && (!envVar || 0 == *envVar))
+                int pos = 0;
+                while (regexec(&rx, script.c_str() + pos, 4, rm, 0) == REG_NOERROR)
                 {
-                    /*getting the mount path from function if unable to get from env variables*/
-                    if (getSDCardMountPath(scmp) == true)
-                    {
-                        scmp.erase(0, scmp.find_first_not_of(" \n\r\t"));
-                        scmp.erase(scmp.find_last_not_of(" \n\r\t") + 1);
-                        envVar = scmp.c_str();
-                    }
-                    else
-                    {
-                         LOGWARN("failed to get SD_CARD_MOUNT_PATH");
-                    }
-                }
+                    std::string var = script.substr(pos + rm[2].rm_so, rm[2].rm_eo - rm[2].rm_so);
+                    std::string replace;
+                    const char *envVar = getenv(var.c_str());
+                    string scmp;
 
-                if (envVar && *envVar)
-                {
-                    replace += envVar;
-                    replace += script.substr(pos + rm[3].rm_so, rm[3].rm_eo - rm[3].rm_so);
-                    if (replace.size() > 0)
+                    if ("SD_CARD_MOUNT_PATH" == var && (!envVar || 0 == *envVar))
                     {
-                        if ('/' == replace[0])
+                        /*getting the mount path from function if unable to get from env variables*/
+                        if (getSDCardMountPath(scmp) == true)
                         {
-                            size_t nr = replace.find_first_not_of('/');
-                            if (string::npos != nr && '*' != replace[nr]) // Check if that is not root dir
-                                replace = script.substr(pos + rm[1].rm_so, rm[1].rm_eo - rm[1].rm_so) + replace;
-                            else 
-                                replace = "";
+                            scmp.erase(0, scmp.find_first_not_of(" \n\r\t"));
+                            scmp.erase(scmp.find_last_not_of(" \n\r\t") + 1);
+                            envVar = scmp.c_str();
                         }
                         else
-                            replace = script.substr(pos + rm[1].rm_so, rm[1].rm_eo - rm[1].rm_so) + replace;
+                        {
+                            LOGWARN("failed to get SD_CARD_MOUNT_PATH");
+                        }
                     }
-                }
-                script.replace(pos + rm[0].rm_so, rm[0].rm_eo - rm[0].rm_so, replace);
-                pos += rm[0].rm_so + replace.size();
-            }
 
-            regfree(&rx);
+                    if (envVar && *envVar)
+                    {
+                        replace += envVar;
+                        replace += script.substr(pos + rm[3].rm_so, rm[3].rm_eo - rm[3].rm_so);
+                        if (replace.size() > 0)
+                        {
+                            if ('/' == replace[0])
+                            {
+                                size_t nr = replace.find_first_not_of('/');
+                                if (string::npos != nr && '*' != replace[nr]) // Check if that is not root dir
+                                    replace = script.substr(pos + rm[1].rm_so, rm[1].rm_eo - rm[1].rm_so) + replace;
+                                else 
+                                    replace = "";
+                            }
+                            else
+                                replace = script.substr(pos + rm[1].rm_so, rm[1].rm_eo - rm[1].rm_so) + replace;
+                        }
+                    }
+                    script.replace(pos + rm[0].rm_so, rm[0].rm_eo - rm[0].rm_so, replace);
+                    pos += rm[0].rm_so + replace.size();
+                }
+
+                regfree(&rx);
+            }
             LOGWARN("lightReset: %s", script.c_str());
 
             std::string error = "";
             int return_value = v_secure_system("sh -c 'rm -rf " LIGHT_RESET_SCRIPT "'");
             bool ok = return_value == 0;
 
-            (void)remove("/opt/secure/persistent/rdkservicestore");
+            if (remove("/opt/secure/persistent/rdkservicestore") != 0)
+            {
+                LOGWARN("Failed to remove /opt/secure/persistent/rdkservicestore");
+            }
 
             successErr.success = ok;
             if (ok)
