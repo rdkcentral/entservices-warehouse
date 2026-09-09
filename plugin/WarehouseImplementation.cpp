@@ -55,6 +55,8 @@
 #define FRONT_PANEL_FAILED 3
 #define FRONT_PANEL_INTERVAL 5000
 
+#define WAREHOUSE_PASSPHRASE_FILE "/opt/secure/warehouse_passphrase"
+
 static const char WAREHOUSE_RESET_FLAG_FILE[] = "/opt/.rebootFlag";
 static const int READ_BUFFER_SZ = 1024;
 static const int MAX_LOG_SIZE = 128;
@@ -97,6 +99,36 @@ namespace WPEFramework
 {
     namespace Plugin
     {
+        static bool readPassphraseFromFile(std::string& passphrase)
+        {
+            std::ifstream file(WAREHOUSE_PASSPHRASE_FILE);
+            if (!file.good())
+            {
+                return false;
+            }
+            if (!std::getline(file, passphrase))
+            {
+                return false;
+            }
+            /* Strip trailing whitespace/newline */
+            while (!passphrase.empty() &&
+                   (passphrase.back() == '\n' || passphrase.back() == '\r' ||
+                    passphrase.back() == ' '  || passphrase.back() == '\t'))
+            {
+                passphrase.pop_back();
+            }
+            return !passphrase.empty();
+        }
+
+        static bool isValidResetType(const std::string& resetType)
+        {
+            return resetType == "COLD"
+                || resetType == "FACTORY"
+                || resetType == "USERFACTORY"
+                || resetType == "WAREHOUSE_CLEAR"
+                || resetType == "WAREHOUSE";
+        }
+
         SERVICE_REGISTRATION(WarehouseImplementation, 1, 0);
         WarehouseImplementation* WarehouseImplementation::_instance = nullptr;
     
@@ -244,7 +276,7 @@ namespace WPEFramework
                     error = "Reset failed";
                 }
             }
-            else // WAREHOUSE
+            else if (resetType.compare("WAREHOUSE") == 0)
             {
                 LOGINFO("WAREHOUSE reset...");
                 ret = suppressReboot ?  WarehouseImplementation::_instance->processWHResetNoReboot(): WarehouseImplementation::_instance->processWHReset();
@@ -254,6 +286,13 @@ namespace WPEFramework
                 else {
                     error = "Reset failed";
                 }
+            }
+            else
+            {
+                /* Should not be reachable — ResetDevice validates resetType
+                 * before dispatching to this function. */
+                LOGERR("WareHouseResetIARM: unexpected resetType '%s'", resetType.c_str());
+                error = "unrecognised resetType";
             }
 
             bool ok = true;
@@ -287,15 +326,10 @@ namespace WPEFramework
         Core::hresult WarehouseImplementation::InternalReset(const string& passPhrase, WarehouseSuccessErr& successErr)
         {
             LOGINFO("");
+
+            /* SECURITY: check PROD status first — PROD builds must never allow
+             * internalReset regardless of passphrase */
             bool isProd = false;
-
-            if (passPhrase.empty() || passPhrase != "FOR TEST PURPOSES ONLY")
-            {
-                successErr.success = false;
-                successErr.error = "incorrect pass phrase";
-                return Core::ERROR_NONE;
-            }
-
             if (0 == access(VERSION_FILE_NAME, R_OK))
             {
                 std::ifstream file(VERSION_FILE_NAME);
@@ -316,24 +350,46 @@ namespace WPEFramework
 
             if (isProd)
             {
+                LOGWARN("InternalReset rejected: PROD build");
                 successErr.success = false;
                 successErr.error = "version is PROD";
+                return Core::ERROR_NONE;
             }
-            else
+
+            /* SECURITY: read the expected passphrase from a restricted file
+             * instead of comparing against a hardcoded string compiled into
+             * the binary.  The file (/opt/secure/warehouse_passphrase) must
+             * be provisioned by the platform with appropriate permissions
+             * (e.g. root-read-only). If the file is absent or empty the
+             * operation is unconditionally rejected. */
+            std::string expectedPassphrase;
+            if (!readPassphraseFromFile(expectedPassphrase))
             {
-#if defined(USE_IARMBUS) || defined(USE_IARM_BUS)
-                std::string error = "";
-                int return_value = v_secure_system("rm -rf /opt/drm /opt/www/whitebox /opt/www/authService && /rebootNow.sh -s WarehouseService &");
-                bool ok = return_value == 0;
-                successErr.success = ok;
-                if (!ok)
-                    // Coverity Fix: ID 68 - COPY_INSTEAD_OF_MOVE: Use std::move for assignment
-                    successErr.error = std::move(error);
-#else
-                response[PARAM_SUCCESS] = false;
-                successErr.error = "No IARMBUS";
-#endif
+                LOGERR("InternalReset rejected: passphrase configuration unavailable");
+                successErr.success = false;
+                successErr.error = "passphrase configuration unavailable";
+                return Core::ERROR_NONE;
             }
+
+            if (passPhrase.empty() || passPhrase != expectedPassphrase)
+            {
+                successErr.success = false;
+                successErr.error = "incorrect pass phrase";
+                return Core::ERROR_NONE;
+            }
+
+#if defined(USE_IARMBUS) || defined(USE_IARM_BUS)
+            std::string error = "";
+            int return_value = v_secure_system("rm -rf /opt/drm /opt/www/whitebox /opt/www/authService && /rebootNow.sh -s WarehouseService &");
+            bool ok = return_value == 0;
+            successErr.success = ok;
+            if (!ok)
+                // Coverity Fix: ID 68 - COPY_INSTEAD_OF_MOVE: Use std::move for assignment
+                successErr.error = std::move(error);
+#else
+            successErr.success = false;
+            successErr.error = "No IARMBUS";
+#endif
             return Core::ERROR_NONE;
         }
         
@@ -637,8 +693,21 @@ namespace WPEFramework
         Core::hresult WarehouseImplementation::ResetDevice(const bool suppressReboot, const string& resetType, WarehouseSuccessErr& successErr)
         {
             LOGINFO("");
+
+            /* SECURITY: validate resetType against the known set.  Previously,
+             * any unrecognised value silently fell through to the WAREHOUSE
+             * reset branch, making it impossible to probe safely. */
+            if (!isValidResetType(resetType))
+            {
+                LOGERR("ResetDevice rejected: unrecognised resetType '%s'", resetType.c_str());
+                successErr.success = false;
+                successErr.error = "unrecognised resetType";
+                return Core::ERROR_NONE;
+            }
+
 #if defined(USE_IARMBUS) || defined(USE_IARM_BUS)
-            LOGWARN("Received request to reset device");
+            LOGWARN("Received request to reset device (type=%s, suppressReboot=%s)",
+                    resetType.c_str(), suppressReboot ? "true" : "false");
 
             try
             {
