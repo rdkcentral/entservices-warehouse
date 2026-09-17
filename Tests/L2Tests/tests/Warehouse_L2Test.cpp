@@ -477,6 +477,14 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_internalReset)
     string passphrase;
     Exchange::IWarehouse::WarehouseSuccessErr response;
 
+    /* Create the passphrase file so the "passphrase configuration unavailable"
+     * path is not hit; we want to exercise the "incorrect pass phrase" path. */
+    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+
     // Invoke internalReset - No pass phrase
     status = m_warehouseplugin->InternalReset(passphrase, response);
     EXPECT_EQ(Core::ERROR_NONE, status);
@@ -511,6 +519,8 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_internalReset)
     status = m_warehouseplugin->InternalReset(passphrase, response);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(response.success);
+
+    ppFile.Destroy();
 }
 
 /********************************************************
@@ -525,6 +535,13 @@ TEST_F(Warehouse_L2Test, Warehouse_internalReset)
     uint32_t status = Core::ERROR_GENERAL;
     JsonObject params;
     JsonObject result;
+
+    /* Provision the passphrase file with the value that the test will send. */
+    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
 
     // Invoke internalReset - No pass phrase
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
@@ -560,6 +577,8 @@ TEST_F(Warehouse_L2Test, Warehouse_internalReset)
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
+
+    ppFile.Destroy();
 }
 
 /********************************************************
@@ -1047,7 +1066,7 @@ TEST_F(Warehouse_L2Test, Warehouse_Clear_ResetDevice)
 /********************************************************
 ************Test case Details **************************
 ** 1. TEST_F to achieve max. Lcov
-** 2. Triggered & Verify the resetDevice Method with params (suppressReboot=false, resetType="") using comrpc
+** 2. Triggered & Verify the resetDevice Method with params (suppressReboot=false, resetType="WAREHOUSE") using comrpc
 *******************************************************/
 TEST_F(Warehouse_L2Test, COMRPC_Warehouse_Generic_ResetDevice)
 {
@@ -1062,7 +1081,7 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_Generic_ResetDevice)
             }));
 
     bool supress = false;
-    string resetType;
+    string resetType = "WAREHOUSE";  // Updated: empty resetType is no longer accepted
     Exchange::IWarehouse::WarehouseSuccessErr response;
     status = m_warehouseplugin->ResetDevice(supress, resetType, response);
     sleep(6);
@@ -1073,7 +1092,7 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_Generic_ResetDevice)
 /********************************************************
 ************Test case Details **************************
 ** 1. TEST_F to achieve max. Lcov
-** 2. Triggered & Verify the resetDevice Method with params (suppressReboot=false, resetType="") using jsonrpc
+** 2. Triggered & Verify the resetDevice Method with params (suppressReboot=false, resetType="WAREHOUSE") using jsonrpc
 *******************************************************/
 
 TEST_F(Warehouse_L2Test, Warehouse_Generic_ResetDevice)
@@ -1091,7 +1110,7 @@ TEST_F(Warehouse_L2Test, Warehouse_Generic_ResetDevice)
                 return Core::ERROR_NONE;
             }));
     params["suppressReboot"] = "false";
-    params["resetType"] = "";
+    params["resetType"] = "WAREHOUSE";  // Updated: empty resetType is no longer accepted
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "resetDevice", params, result);
     EXPECT_TRUE(result["success"].Boolean());
 }
@@ -1099,7 +1118,7 @@ TEST_F(Warehouse_L2Test, Warehouse_Generic_ResetDevice)
 /********************************************************
 ************Test case Details **************************
 ** 1. TEST_F to achieve max. Lcov
-** 2. Triggered & Verify the resetDevice Method with params (suppressReboot=true, resetType="") using comrpc
+** 2. Triggered & Verify the resetDevice Method with params (suppressReboot=true, resetType="WAREHOUSE") using comrpc
 *******************************************************/
 TEST_F(Warehouse_L2Test, COMRPC_Warehouse_UserFactory_ResetDevice_Failure)
 {
@@ -1114,7 +1133,7 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_UserFactory_ResetDevice_Failure)
             }));
 
     bool supress = true;
-    string resetType;
+    string resetType = "WAREHOUSE";  // Updated: empty resetType is no longer accepted
     Exchange::IWarehouse::WarehouseSuccessErr response;
     status = m_warehouseplugin->ResetDevice(supress, resetType, response);
     sleep(6);
@@ -1125,7 +1144,7 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_UserFactory_ResetDevice_Failure)
 /********************************************************
 ************Test case Details **************************
 ** 1. TEST_F to achieve max. Lcov
-** 2. Triggered & Verify the resetDevice Method with params (suppressReboot=true, resetType="") using jsonrpc
+** 2. Triggered & Verify the resetDevice Method with params (suppressReboot=true, resetType="WAREHOUSE") using jsonrpc
 *******************************************************/
 
 TEST_F(Warehouse_L2Test, Warehouse_UserFactory_ResetDevice_Failure)
@@ -1144,7 +1163,100 @@ TEST_F(Warehouse_L2Test, Warehouse_UserFactory_ResetDevice_Failure)
             }));
 
     params["suppressReboot"] = true;
+    params["resetType"] = "WAREHOUSE";  // Updated: empty resetType is no longer accepted
+    status = InvokeServiceMethod("org.rdk.Warehouse.1", "resetDevice", params, result);
+    EXPECT_TRUE(result["success"].Boolean());
+}
+
+/*
+ * Security regression tests for entservices_Critical_010
+ * RDKEMW-24481: Warehouse unauthenticated reset APIs
+ */
+
+TEST_F(Warehouse_L2Test, Security_InternalResetNoPassphraseFile)
+{
+    /* When the passphrase file is absent, internalReset must be rejected
+     * regardless of the passphrase supplied — even the old hardcoded one. */
+    std::remove("/opt/secure/warehouse_passphrase");
+
+    JSONRPC::LinkType<Core::JSON::IElement> jsonrpc(WAREHOUSE_CALLSIGN, WAREHOUSEL2TEST_CALLSIGN);
+    uint32_t status = Core::ERROR_GENERAL;
+    JsonObject params;
+    JsonObject result;
+
+    params["passPhrase"] = "FOR TEST PURPOSES ONLY";
+    status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_FALSE(result["success"].Boolean());
+    EXPECT_THAT(result["error"].String(), ::testing::HasSubstr("passphrase configuration unavailable"));
+}
+
+TEST_F(Warehouse_L2Test, Security_InternalResetHardcodedPassphraseRejected)
+{
+    /* The old hardcoded passphrase must be rejected when the file contains
+     * a different value. */
+    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "OPERATOR_PROVISIONED_SECRET\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+
+    JSONRPC::LinkType<Core::JSON::IElement> jsonrpc(WAREHOUSE_CALLSIGN, WAREHOUSEL2TEST_CALLSIGN);
+    uint32_t status = Core::ERROR_GENERAL;
+    JsonObject params;
+    JsonObject result;
+
+    params["passPhrase"] = "FOR TEST PURPOSES ONLY";
+    status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_FALSE(result["success"].Boolean());
+    EXPECT_THAT(result["error"].String(), ::testing::HasSubstr("incorrect pass phrase"));
+
+    ppFile.Destroy();
+}
+
+TEST_F(Warehouse_L2Test, Security_ResetDeviceRejectsUnknownType)
+{
+    /* An unrecognised resetType must be rejected instead of falling through
+     * to the destructive WAREHOUSE reset. */
+    JSONRPC::LinkType<Core::JSON::IElement> jsonrpc(WAREHOUSE_CALLSIGN, WAREHOUSEL2TEST_CALLSIGN);
+    uint32_t status = Core::ERROR_GENERAL;
+    JsonObject params;
+    JsonObject result;
+
+    params["suppressReboot"] = true;
+    params["resetType"] = "EVIL_INJECTION";
+    status = InvokeServiceMethod("org.rdk.Warehouse.1", "resetDevice", params, result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_FALSE(result["success"].Boolean());
+    EXPECT_THAT(result["error"].String(), ::testing::HasSubstr("unrecognised resetType"));
+
     params["resetType"] = "";
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "resetDevice", params, result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_FALSE(result["success"].Boolean());
+}
+
+TEST_F(Warehouse_L2Test, Security_ResetDeviceAcceptsValidTypes)
+{
+    /* Valid reset types must still be accepted.  We only test one to avoid
+     * actually executing destructive scripts — the mock intercepts them. */
+    JSONRPC::LinkType<Core::JSON::IElement> jsonrpc(WAREHOUSE_CALLSIGN, WAREHOUSEL2TEST_CALLSIGN);
+    uint32_t status = Core::ERROR_GENERAL;
+    JsonObject params;
+    JsonObject result;
+
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke(
+            [](const char* command, va_list args) {
+                EXPECT_EQ(string(command), string("sh /lib/rdk/deviceReset.sh factory"));
+                return Core::ERROR_NONE;
+            }));
+
+    params["suppressReboot"] = true;
+    params["resetType"] = "FACTORY";
+    status = InvokeServiceMethod("org.rdk.Warehouse.1", "resetDevice", params, result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
 }
