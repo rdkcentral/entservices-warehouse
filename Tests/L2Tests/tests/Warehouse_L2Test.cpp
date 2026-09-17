@@ -1109,7 +1109,7 @@ TEST_F(Warehouse_L2Test, Warehouse_Generic_ResetDevice)
                 EXPECT_EQ(string(command), string("sh /lib/rdk/deviceReset.sh warehouse"));
                 return Core::ERROR_NONE;
             }));
-    params["suppressReboot"] = "false";
+    params["suppressReboot"] = false;  // Fixed: should be boolean, not string
     params["resetType"] = "WAREHOUSE";  // Updated: empty resetType is no longer accepted
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "resetDevice", params, result);
     EXPECT_TRUE(result["success"].Boolean());
