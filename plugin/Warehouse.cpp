@@ -110,6 +110,7 @@ namespace WPEFramework
             VARIABLE_IS_NOT_USED uint32_t result = _warehouse->Release();
 
             _warehouse = nullptr;
+            _warehouse->Release();
 
             // It should have been the last reference we are releasing,
             // so it should endup in a DESTRUCTION_SUCCEEDED, if not we
