@@ -79,11 +79,7 @@ namespace Thunder
 
             public:
                 static Core::ProxyType<Core::IDispatch> Create(WarehouseImplementation* warehouseImplementation, Event event, JsonObject params) {
-#ifndef USE_THUNDER_R4
-                    return (Core::proxy_cast<Core::IDispatch>(Core::ProxyType<Job>::Create(warehouseImplementation, event, params)));
-#else
                     return (Core::ProxyType<Core::IDispatch>(Core::ProxyType<Job>::Create(warehouseImplementation, event, params)));
-#endif
                 }
 
                 virtual void Dispatch() {
