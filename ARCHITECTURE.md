@@ -2,13 +2,13 @@
 
 ## Overview
 
-The Warehouse plugin is a WPEFramework (Thunder) service plugin that provides device warehouse management capabilities for RDK-based devices. It enables factory reset operations, device state verification, and warehouse mode operations essential for device provisioning, maintenance, and return-to-factory scenarios.
+The Warehouse plugin is a Thunder service plugin that provides device warehouse management capabilities for RDK-based devices. It enables factory reset operations, device state verification, and warehouse mode operations essential for device provisioning, maintenance, and return-to-factory scenarios.
 
 ## System Architecture
 
 ### Component Structure
 
-The Warehouse plugin follows the WPEFramework plugin architecture with the following key components:
+The Warehouse plugin follows the Thunder plugin architecture with the following key components:
 
 ```
 entservices-warehouse/
@@ -36,7 +36,7 @@ entservices-warehouse/
 
 #### 1. Plugin Interface Layer (Warehouse.cpp/.h)
 
-The plugin interface layer implements the WPEFramework plugin contracts:
+The plugin interface layer implements the Thunder plugin contracts:
 - **IPlugin Interface**: Lifecycle management (Initialize/Deinitialize)
 - **JSONRPC Interface**: Exposes REST API endpoints for external clients
 - **IWarehouse Interface**: COM-RPC interface for internal service communication
@@ -112,7 +112,7 @@ Client Request → JSON-RPC → Warehouse Plugin → WarehouseImplementation
 
 ## Plugin Framework Integration
 
-The Warehouse plugin integrates with WPEFramework through:
+The Warehouse plugin integrates with Thunder through:
 
 1. **Service Registration**: Registered as a COM service with ID `Exchange::IWarehouse`
 2. **Plugin Lifecycle**: Managed by PluginHost controller
@@ -122,8 +122,8 @@ The Warehouse plugin integrates with WPEFramework through:
 ## Dependencies
 
 ### System Libraries
-- **WPEFramework Core**: Plugin infrastructure and base classes
-- **WPEFramework Interfaces**: IWarehouse and related exchange interfaces
+- **Thunder Core**: Plugin infrastructure and base classes
+- **Thunder Interfaces**: IWarehouse and related exchange interfaces
 - **DeviceSettings (DS)**: Hardware abstraction for device capabilities
 - **IARM Bus**: Inter-process communication framework
 
@@ -148,7 +148,7 @@ The implementation uses:
 
 ## Error Handling
 
-- Uses WPEFramework Core::hresult return codes
+- Uses Thunder Core::hresult return codes
 - Comprehensive error reporting through `WarehouseSuccessErr` structures
 - Validation of input parameters (passphrase, reset types)
 - Graceful degradation when optional dependencies unavailable

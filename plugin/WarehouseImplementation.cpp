@@ -93,7 +93,7 @@ bool isFileExistsAndOlderThen(const char* pFileName, long age = -1)
 }
 }
 
-namespace WPEFramework
+namespace Thunder
 {
     namespace Plugin
     {
@@ -831,4 +831,4 @@ namespace WPEFramework
         }
     
     } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder

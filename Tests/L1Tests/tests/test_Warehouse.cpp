@@ -34,7 +34,7 @@
 #include "COMLinkMock.h"
 #include <fstream>
 
-using namespace WPEFramework;
+using namespace Thunder;
 
 using ::testing::NiceMock;
 

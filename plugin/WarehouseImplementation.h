@@ -31,7 +31,7 @@
 #include "UtilsThreadRAII.h"
 #include "libIARM.h"
 
-namespace WPEFramework
+namespace Thunder
 {
     namespace Plugin
     {
@@ -135,4 +135,4 @@ namespace WPEFramework
             friend class Job;
         };
     } // namespace Plugin
-} // namespace WPEFramework
+} // namespace Thunder

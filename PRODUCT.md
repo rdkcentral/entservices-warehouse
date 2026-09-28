@@ -165,7 +165,7 @@ onResetDone(success: bool, error: string)
 - Custom RDK variants with Thunder framework
 
 ### Software Requirements
-- Thunder/WPEFramework R4.4+
+- Thunder R5.x+
 - IARM Bus infrastructure
 - Device Settings (DS) HAL
 - System Manager service

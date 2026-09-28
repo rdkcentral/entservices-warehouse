@@ -35,9 +35,9 @@
 #define WAREHOUSEL2TEST_CALLSIGN _T("L2tests.1")
 
 using ::testing::NiceMock;
-using namespace WPEFramework;
+using namespace Thunder;
 using testing::StrictMock;
-using ::WPEFramework::Exchange::IWarehouse;
+using ::Thunder::Exchange::IWarehouse;
 
 typedef enum : uint32_t {
     WAREHOUSEL2TEST_RESETDONE = 0x00000001,
@@ -570,7 +570,7 @@ TEST_F(Warehouse_L2Test, Warehouse_internalReset)
 TEST_F(Warehouse_L2Test, COMRPC_Warehouse_iscleanTest)
 {
     uint32_t status = Core::ERROR_NONE;
-    WPEFramework::RPC::IStringIterator* files;
+    Thunder::RPC::IStringIterator* files;
     bool clean, success;
     int age;
     string error;
@@ -724,7 +724,7 @@ TEST_F(Warehouse_L2Test, Write_To_DeviceProperties)
     int age = 100;
     bool clean = false, success = false;
     string error;
-    WPEFramework::RPC::IStringIterator* files = nullptr;
+    Thunder::RPC::IStringIterator* files = nullptr;
 
     uint32_t status = m_warehouseplugin->IsClean(age, clean, files, success, error);
     TEST_LOG("error: %s",error.c_str());
