@@ -151,7 +151,6 @@ cd entservices-testframework/Tests
 echo " Empty mocks creation to avoid compilation errors"
 echo "======================================================================================"
 mkdir -p headers
-mkdir -p headers/rdk/ds
 mkdir -p headers/rdk/iarmbus
 mkdir -p headers/rdk/iarmmgrs-hal
 mkdir -p headers/proc
@@ -162,27 +161,6 @@ echo "==========================================================================
 echo "empty headers creation"
 cd headers
 echo "current working dir: "${PWD}
-touch rdk/ds/audioOutputPort.hpp
-touch rdk/ds/compositeIn.hpp
-touch rdk/ds/dsDisplay.h
-touch rdk/ds/dsError.h
-touch rdk/ds/dsMgr.h
-touch rdk/ds/dsTypes.h
-touch rdk/ds/dsUtl.h
-touch rdk/ds/exception.hpp
-touch rdk/ds/hdmiIn.hpp
-touch rdk/ds/host.hpp
-touch rdk/ds/list.hpp
-touch rdk/ds/manager.hpp
-touch rdk/ds/sleepMode.hpp
-touch rdk/ds/videoDevice.hpp
-touch rdk/ds/videoOutputPort.hpp
-touch rdk/ds/videoOutputPortConfig.hpp
-touch rdk/ds/videoOutputPortType.hpp
-touch rdk/ds/videoResolution.hpp
-touch rdk/ds/frontPanelIndicator.hpp
-touch rdk/ds/frontPanelConfig.hpp
-touch rdk/ds/frontPanelTextDisplay.hpp
 touch rdk/iarmbus/libIARM.h
 touch rdk/iarmbus/libIBus.h
 touch rdk/iarmbus/libIBusDaemon.h
