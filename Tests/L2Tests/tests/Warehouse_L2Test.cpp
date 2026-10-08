@@ -477,40 +477,30 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_internalReset)
     string passphrase;
     Exchange::IWarehouse::WarehouseSuccessErr response;
 
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+
     // Invoke internalReset - No pass phrase
     status = m_warehouseplugin->InternalReset(passphrase, response);
-    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, status);
     EXPECT_FALSE(response.success);
 
     // Invoke internalReset - Incorrect pass phrase
     passphrase = "Incorrect pass phrase";
     status = m_warehouseplugin->InternalReset(passphrase, response);
-    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, status);
     EXPECT_FALSE(response.success);
-
-    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
-        .Times(2)
-        .WillOnce(::testing::Invoke(
-            [](const char* command, va_list args) {
-                return Core::ERROR_NONE;
-            }))
-        .WillOnce(::testing::Invoke(
-            [](const char* command, va_list args) {
-                EXPECT_EQ(string(command), string("rm -rf /opt/drm /opt/www/whitebox /opt/www/authService && /rebootNow.sh -s WarehouseService &"));
-                return Core::ERROR_NONE;
-            }));
 
     // Invoke internalReset - correct pass phrase - script Failure
     passphrase = "FOR TEST PURPOSES ONLY";
     status = m_warehouseplugin->InternalReset(passphrase, response);
-    EXPECT_EQ(Core::ERROR_NONE, status);
-    EXPECT_TRUE(response.success);
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, status);
+    EXPECT_FALSE(response.success);
 
     // Invoke internalReset - Correct pass phrase - Return success
     passphrase = "FOR TEST PURPOSES ONLY";
     status = m_warehouseplugin->InternalReset(passphrase, response);
-    EXPECT_EQ(Core::ERROR_NONE, status);
-    EXPECT_TRUE(response.success);
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, status);
+    EXPECT_FALSE(response.success);
 }
 
 /********************************************************
@@ -526,40 +516,26 @@ TEST_F(Warehouse_L2Test, Warehouse_internalReset)
     JsonObject params;
     JsonObject result;
 
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+
     // Invoke internalReset - No pass phrase
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
-    EXPECT_EQ(Core::ERROR_NONE, status);
-    EXPECT_FALSE(result["success"].Boolean());
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, status);
 
     // Invoke internalReset - Incorrect pass phrase
     params["passPhrase"] = "Incorrect pass phrase";
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
-    EXPECT_EQ(Core::ERROR_NONE, status);
-    EXPECT_FALSE(result["success"].Boolean());
-
-    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
-        .Times(2)
-        .WillOnce(::testing::Invoke(
-            [](const char* command, va_list args) {
-                return Core::ERROR_NONE;
-            }))
-        .WillOnce(::testing::Invoke(
-            [](const char* command, va_list args) {
-                EXPECT_EQ(string(command), string("rm -rf /opt/drm /opt/www/whitebox /opt/www/authService && /rebootNow.sh -s WarehouseService &"));
-                return Core::ERROR_NONE;
-            }));
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, status);
 
     // Invoke internalReset - correct pass phrase - script Failure
     params["passPhrase"] = "FOR TEST PURPOSES ONLY";
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
-    EXPECT_EQ(Core::ERROR_NONE, status);
-    EXPECT_TRUE(result["success"].Boolean());
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, status);
 
     // Invoke internalReset - Correct pass phrase - Return success
     params["passPhrase"] = "FOR TEST PURPOSES ONLY";
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
-    EXPECT_EQ(Core::ERROR_NONE, status);
-    EXPECT_TRUE(result["success"].Boolean());
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, status);
 }
 
 /********************************************************

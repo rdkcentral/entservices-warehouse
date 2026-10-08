@@ -305,39 +305,26 @@ TEST_F(WarehouseInitializedTest, UserFactoryResetDeviceFailure)
 TEST_F(WarehouseInitializedTest, internalResetFailPassPhrase)
 {
     // Invoke internalReset - No pass phrase
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{}"), response));
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, handler.Invoke(connection, _T("internalReset"), _T("{}"), response));
 
     // Invoke internalReset - Incorrect pass phrase
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"Test Phrase\"}"), response));
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"Test Phrase\"}"), response));
 }
 
 TEST_F(WarehouseInitializedTest, internalResetScriptFail)
 {
-    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
-        .Times(1)
-        .WillOnce(::testing::Invoke(
-            [](const char* command, va_list args) {
-                return Core::ERROR_NONE;
-            }));
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
 
     // Invoke internalReset - Correct pass phrase - Return error
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
-    EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
 }
 
 TEST_F(WarehouseInitializedTest, internalReset)
 {
-    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
-        .Times(1)
-        .WillOnce(::testing::Invoke(
-            [](const char* command, va_list args) {
-                EXPECT_EQ(string(command), string("rm -rf /opt/drm /opt/www/whitebox /opt/www/authService && /rebootNow.sh -s WarehouseService &"));
-                return Core::ERROR_NONE;
-            }));
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
 
     // Invoke internalReset - Correct pass phrase - Return success
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
-    EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
+    EXPECT_EQ(Core::ERROR_UNAVAILABLE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
 }
 
 TEST_F(WarehouseInitializedTest, lightResetScriptFail)
