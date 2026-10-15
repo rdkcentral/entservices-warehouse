@@ -289,12 +289,12 @@ namespace WPEFramework
             LOGINFO("");
             bool isProd = false;
 
-            if (passPhrase.empty() || passPhrase != "FOR TEST PURPOSES ONLY")
-            {
-                successErr.success = false;
-                successErr.error = "incorrect pass phrase";
-                return Core::ERROR_NONE;
-            }
+            // Remove hardcoded credential and require proper authentication
+            // This operation should only be accessible through proper authenticated channels
+            // Reject all direct passPhrase-based authentication for security
+            successErr.success = false;
+            successErr.error = "Authentication required - passPhrase-based authentication disabled for security";
+            return Core::ERROR_UNAVAILABLE;
 
             if (0 == access(VERSION_FILE_NAME, R_OK))
             {
