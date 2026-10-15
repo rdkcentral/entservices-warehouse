@@ -111,7 +111,6 @@ namespace WPEFramework
             
             void dispatchEvent(Event, const JsonObject &params);
             void Dispatch(Event event, const JsonObject &params);
-            static void dsWareHouseOpnStatusChanged(const char *owner, IARM_EventId_t eventId, void *data, size_t len);
             /*gets the SD card mount path by reading /proc/mounts, returns true on success, false otherwise*/
             bool getSDCardMountPath(string&);
             /*Adds 0 to file /opt/.rebootFlag*/

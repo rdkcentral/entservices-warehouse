@@ -25,7 +25,6 @@ entservices-warehouse/
 │   ├── frontpanel.cpp/.h     # Front panel LED control
 │   └── tptimer.h             # Timer utilities
 ├── cmake/                     # Build configuration
-│   ├── FindDS.cmake          # DeviceSettings library finder
 │   └── FindIARMBus.cmake     # IARM bus library finder
 └── Tests/                     # Test suites
     ├── L1Tests/              # Unit tests
@@ -71,7 +70,6 @@ The core business logic layer provides:
 **IARM Bus Communication**:
 - Uses IARM (Integrated Application Runtime Manager) for inter-process communication
 - Communicates with sysMgr for system-level reset operations
-- Receives events from Device Settings (dsWareHouseOpnStatusChanged)
 - Thread-safe event dispatching and notification
 
 **JSON-RPC Protocol**:
@@ -124,7 +122,6 @@ The Warehouse plugin integrates with WPEFramework through:
 ### System Libraries
 - **WPEFramework Core**: Plugin infrastructure and base classes
 - **WPEFramework Interfaces**: IWarehouse and related exchange interfaces
-- **DeviceSettings (DS)**: Hardware abstraction for device capabilities
 - **IARM Bus**: Inter-process communication framework
 
 ### RDK Components
