@@ -248,8 +248,8 @@ TEST_F(WarehouseInitializedTest, GenericResetDevice)
                 return Core::ERROR_NONE;
             }));
 
-    // reset: suppress reboot: false
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":false}"), response));
+    // reset: suppress reboot: false, type: WAREHOUSE (explicit — omitting resetType is no longer accepted)
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":false,\"resetType\":\"WAREHOUSE\"}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
 }
 
@@ -280,7 +280,7 @@ TEST_F(WarehouseInitializedTest, GenericResetDeviceNoResponse)
                 return Core::ERROR_NONE;
             }));
 
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"WAREHOUSE\"}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
     EXPECT_EQ(Core::ERROR_NONE, resetDone.Lock(5000));
     EVENT_UNSUBSCRIBE(1, _T("resetDone"), _T("org.rdk.Warehouse"), resetDoneMessage);
@@ -297,22 +297,43 @@ TEST_F(WarehouseInitializedTest, UserFactoryResetDeviceFailure)
                 return Core::ERROR_GENERAL;
             }));
 
-    // reset: suppress reboot: true - This doesn't generate any event (Expect no response)
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true}"), response));
+    // reset: suppress reboot: true, type: WAREHOUSE (explicit — omitting resetType is no longer accepted)
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"WAREHOUSE\"}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
 }
 
 TEST_F(WarehouseInitializedTest, internalResetFailPassPhrase)
 {
+    /* Create the passphrase file so the "passphrase configuration unavailable"
+     * path is not hit; we want to exercise the "incorrect pass phrase" path. */
+    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "CORRECT_SECRET\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+
     // Invoke internalReset - No pass phrase
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{}"), response));
 
     // Invoke internalReset - Incorrect pass phrase
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"Test Phrase\"}"), response));
+
+    // Invoke internalReset - Old hardcoded passphrase must no longer work
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+
+    ppFile.Destroy();
 }
 
 TEST_F(WarehouseInitializedTest, internalResetScriptFail)
 {
+    /* Provision the passphrase file with the value that the test will send. */
+    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+
     EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
         .Times(1)
         .WillOnce(::testing::Invoke(
@@ -323,10 +344,19 @@ TEST_F(WarehouseInitializedTest, internalResetScriptFail)
     // Invoke internalReset - Correct pass phrase - Return error
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
+
+    ppFile.Destroy();
 }
 
 TEST_F(WarehouseInitializedTest, internalReset)
 {
+    /* Provision the passphrase file with the value that the test will send. */
+    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+
     EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
         .Times(1)
         .WillOnce(::testing::Invoke(
@@ -338,6 +368,8 @@ TEST_F(WarehouseInitializedTest, internalReset)
     // Invoke internalReset - Correct pass phrase - Return success
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
+
+    ppFile.Destroy();
 }
 
 TEST_F(WarehouseInitializedTest, lightResetScriptFail)
@@ -405,6 +437,67 @@ TEST_F(WarehouseInitializedTest, isClean)
 
     fileConf.Destroy();
     filePref.Destroy();
+}
+
+/*
+ * Security regression tests for entservices_Critical_010
+ * RDKEMW-24481: Warehouse unauthenticated reset APIs
+ */
+
+TEST_F(WarehouseInitializedTest, Security_InternalResetNoPassphraseFile)
+{
+    /* When the passphrase file is absent, internalReset must be rejected
+     * regardless of the passphrase supplied — even the old hardcoded one. */
+    std::remove("/opt/secure/warehouse_passphrase");
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+    EXPECT_THAT(response, ::testing::HasSubstr("passphrase configuration unavailable"));
+}
+
+TEST_F(WarehouseInitializedTest, Security_InternalResetHardcodedPassphraseRejected)
+{
+    /* The old hardcoded passphrase must be rejected when the file contains
+     * a different value. */
+    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "OPERATOR_PROVISIONED_SECRET\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+    EXPECT_THAT(response, ::testing::HasSubstr("incorrect pass phrase"));
+
+    ppFile.Destroy();
+}
+
+TEST_F(WarehouseInitializedTest, Security_ResetDeviceRejectsUnknownType)
+{
+    /* An unrecognised resetType must be rejected instead of falling through
+     * to the destructive WAREHOUSE reset. */
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"EVIL_INJECTION\"}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+    EXPECT_THAT(response, ::testing::HasSubstr("unrecognised resetType"));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"\"}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+}
+
+TEST_F(WarehouseInitializedTest, Security_ResetDeviceAcceptsValidTypes)
+{
+    /* Valid reset types must still be accepted.  We only test one to avoid
+     * actually executing destructive scripts — the mock intercepts them. */
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke(
+            [](const char* command, va_list args) {
+                EXPECT_EQ(string(command), string("sh /lib/rdk/deviceReset.sh factory"));
+                return Core::ERROR_NONE;
+            }));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"FACTORY\"}"), response));
+    EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
 }
 
 extern "C" FILE* __real_popen(const char* command, const char* type);
