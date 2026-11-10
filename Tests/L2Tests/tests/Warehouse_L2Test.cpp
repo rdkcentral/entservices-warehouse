@@ -1133,7 +1133,7 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_UserFactory_ResetDevice_Failure)
             }));
 
     bool supress = true;
-    string resetType = "WAREHOUSE";  // Updated: empty resetType is no longer accepted
+    string resetType = "";  // Empty resetType defaults to WAREHOUSE for backwards compatibility
     Exchange::IWarehouse::WarehouseSuccessErr response;
     status = m_warehouseplugin->ResetDevice(supress, resetType, response);
     sleep(6);

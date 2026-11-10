@@ -696,8 +696,10 @@ namespace WPEFramework
 
             /* SECURITY: validate resetType against the known set.  Previously,
              * any unrecognised value silently fell through to the WAREHOUSE
-             * reset branch, making it impossible to probe safely. */
-            if (!isValidResetType(resetType))
+             * reset branch, making it impossible to probe safely.
+             * Normalize empty resetType to WAREHOUSE to preserve backwards compatibility. */
+            string effectiveResetType = resetType.empty() ? "WAREHOUSE" : resetType;
+            if (!isValidResetType(effectiveResetType))
             {
                 LOGERR("ResetDevice rejected: unrecognised resetType '%s'", resetType.c_str());
                 successErr.success = false;
@@ -707,14 +709,14 @@ namespace WPEFramework
 
 #if defined(USE_IARMBUS) || defined(USE_IARM_BUS)
             LOGWARN("Received request to reset device (type=%s, suppressReboot=%s)",
-                    resetType.c_str(), suppressReboot ? "true" : "false");
+                    effectiveResetType.c_str(), suppressReboot ? "true" : "false");
 
             try
             {
                 if (m_resetThread.get().joinable())
                     m_resetThread.get().join();
 
-                m_resetThread = Utils::ThreadRAII(std::thread(WareHouseResetIARM, this, suppressReboot, resetType));
+                m_resetThread = Utils::ThreadRAII(std::thread(WareHouseResetIARM, this, suppressReboot, effectiveResetType));
             }
             catch(const std::system_error& e)
             {

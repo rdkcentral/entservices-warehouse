@@ -248,8 +248,8 @@ TEST_F(WarehouseInitializedTest, GenericResetDevice)
                 return Core::ERROR_NONE;
             }));
 
-    // reset: suppress reboot: false, type: WAREHOUSE (explicit — omitting resetType is no longer accepted)
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":false,\"resetType\":\"WAREHOUSE\"}"), response));
+    // reset: suppress reboot: false (omitting resetType defaults to WAREHOUSE)
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":false}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
 }
 
@@ -280,7 +280,7 @@ TEST_F(WarehouseInitializedTest, GenericResetDeviceNoResponse)
                 return Core::ERROR_NONE;
             }));
 
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"WAREHOUSE\"}"), response));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
     EXPECT_EQ(Core::ERROR_NONE, resetDone.Lock(5000));
     EVENT_UNSUBSCRIBE(1, _T("resetDone"), _T("org.rdk.Warehouse"), resetDoneMessage);
@@ -297,8 +297,8 @@ TEST_F(WarehouseInitializedTest, UserFactoryResetDeviceFailure)
                 return Core::ERROR_GENERAL;
             }));
 
-    // reset: suppress reboot: true, type: WAREHOUSE (explicit — omitting resetType is no longer accepted)
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"WAREHOUSE\"}"), response));
+    // reset: suppress reboot: true (omitting resetType defaults to WAREHOUSE)
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
 }
 
@@ -479,9 +479,22 @@ TEST_F(WarehouseInitializedTest, Security_ResetDeviceRejectsUnknownType)
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"EVIL_INJECTION\"}"), response));
     EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
     EXPECT_THAT(response, ::testing::HasSubstr("unrecognised resetType"));
+}
 
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"\"}"), response));
-    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+TEST_F(WarehouseInitializedTest, Security_ResetDeviceDefaultsToWarehouse)
+{
+    /* Omitting resetType defaults to WAREHOUSE for backwards compatibility.
+     * This test verifies the normalization. */
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke(
+            [](const char* command, va_list args) {
+                EXPECT_EQ(string(command), string("sh /lib/rdk/deviceReset.sh warehouse"));
+                return Core::ERROR_NONE;
+            }));
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true}"), response));
+    EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
 }
 
 TEST_F(WarehouseInitializedTest, Security_ResetDeviceAcceptsValidTypes)
