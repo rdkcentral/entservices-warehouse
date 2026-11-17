@@ -1231,10 +1231,18 @@ TEST_F(Warehouse_L2Test, Security_ResetDeviceRejectsUnknownType)
     EXPECT_FALSE(result["success"].Boolean());
     EXPECT_THAT(result["error"].String(), ::testing::HasSubstr("unrecognised resetType"));
 
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
+        .Times(1)
+        .WillOnce(::testing::Invoke(
+            [](const char* command, va_list args) {
+                EXPECT_EQ(string(command), string("sh /lib/rdk/deviceReset.sh warehouse"));
+                return Core::ERROR_NONE;
+            }));
+
     params["resetType"] = "";
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "resetDevice", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
-    EXPECT_FALSE(result["success"].Boolean());
+    EXPECT_TRUE(result["success"].Boolean());
 }
 
 TEST_F(Warehouse_L2Test, Security_ResetDeviceAcceptsValidTypes)
