@@ -1235,7 +1235,7 @@ TEST_F(Warehouse_L2Test, Security_ResetDeviceRejectsUnknownType)
         .Times(1)
         .WillOnce(::testing::Invoke(
             [](const char* command, va_list args) {
-                EXPECT_EQ(string(command), string("sh /lib/rdk/deviceReset.sh warehouse"));
+                EXPECT_EQ(string(command), string("sh /lib/rdk/deviceReset.sh warehouse --suppressReboot &"));
                 return Core::ERROR_NONE;
             }));
 
