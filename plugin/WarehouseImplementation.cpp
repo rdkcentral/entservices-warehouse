@@ -21,6 +21,10 @@
 
 #include <algorithm>
 #include <fstream>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <cstdlib>
 #include "secure_wrapper.h"
 #include <regex.h>
 #include <regex>
@@ -54,6 +58,8 @@
 #define FRONT_PANEL_INPROGRESS 1
 #define FRONT_PANEL_FAILED 3
 #define FRONT_PANEL_INTERVAL 5000
+
+#define WAREHOUSE_PASSPHRASE_FILE "/opt/secure/warehouse_passphrase"
 
 static const char WAREHOUSE_RESET_FLAG_FILE[] = "/opt/.rebootFlag";
 static const int READ_BUFFER_SZ = 1024;
@@ -97,6 +103,43 @@ namespace WPEFramework
 {
     namespace Plugin
     {
+        static bool readPassphraseFromFile(std::string& passphrase)
+        {
+            const char* path = WAREHOUSE_PASSPHRASE_FILE;
+#ifdef WAREHOUSE_SECURITY_TEST_PATHS
+            // Compiled only into test builds; never accept path overrides on devices.
+            path = std::getenv("WAREHOUSE_TEST_PASSPHRASE_FILE");
+            if (!path) return false;
+#endif
+            // Validate the opened descriptor, not a path checked before opening:
+            // O_NOFOLLOW prevents symlinks and O_NONBLOCK avoids blocking on FIFOs.
+            const int fd = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
+            if (fd < 0) return false;
+            struct stat info;
+            const bool trusted = fstat(fd, &info) == 0 && S_ISREG(info.st_mode)
+                && info.st_uid == 0 && (info.st_mode & 07777 & ~0400) == 0;
+            if (!trusted)
+            {
+                close(fd);
+                return false;
+            }
+            passphrase.clear();
+            char ch;
+            ssize_t count;
+            while ((count = read(fd, &ch, 1)) == 1 && ch != '\n' && passphrase.size() < 4096)
+                passphrase.push_back(ch);
+            close(fd);
+            if (count < 0 || passphrase.size() >= 4096) return false;
+            /* Strip trailing whitespace/newline */
+            while (!passphrase.empty() &&
+                   (passphrase.back() == '\n' || passphrase.back() == '\r' ||
+                    passphrase.back() == ' '  || passphrase.back() == '\t'))
+            {
+                passphrase.pop_back();
+            }
+            return !passphrase.empty();
+        }
+
         SERVICE_REGISTRATION(WarehouseImplementation, 1, 0);
         WarehouseImplementation* WarehouseImplementation::_instance = nullptr;
     
@@ -287,18 +330,18 @@ namespace WPEFramework
         Core::hresult WarehouseImplementation::InternalReset(const string& passPhrase, WarehouseSuccessErr& successErr)
         {
             LOGINFO("");
-            bool isProd = false;
 
-            if (passPhrase.empty() || passPhrase != "FOR TEST PURPOSES ONLY")
+            /* SECURITY: check PROD status first — PROD builds must never allow
+             * internalReset regardless of passphrase */
+            bool isProd = true;
+            bool imageVerified = false;
+            const char* versionPath = VERSION_FILE_NAME;
+#ifdef WAREHOUSE_SECURITY_TEST_PATHS
+            versionPath = std::getenv("WAREHOUSE_TEST_VERSION_FILE");
+#endif
+            if (versionPath && 0 == access(versionPath, R_OK))
             {
-                successErr.success = false;
-                successErr.error = "incorrect pass phrase";
-                return Core::ERROR_NONE;
-            }
-
-            if (0 == access(VERSION_FILE_NAME, R_OK))
-            {
-                std::ifstream file(VERSION_FILE_NAME);
+                std::ifstream file(versionPath);
 
                 LOGWARN("%s: attempt to open file '%s' for read mode with result %s", __FUNCTION__
                         , VERSION_FILE_NAME, file.good() ? "sucess" : "failure");
@@ -306,34 +349,64 @@ namespace WPEFramework
                 std::string line;
                 while(std::getline(file, line))
                 {
-                    if (line.find("imagename:") != std::string::npos)
+                    if (line.compare(0, 10, "imagename:") == 0)
                     {
-                        isProd = line.find("PROD") != std::string::npos;
+                        imageVerified = line.find_first_not_of(" \t\r", 10) != std::string::npos;
+                        isProd = line.find("PROD", 10) != std::string::npos;
                         break;
                     }
                 }
             }
 
-            if (isProd)
+            if (!imageVerified)
             {
                 successErr.success = false;
-                successErr.error = "version is PROD";
+                successErr.error = "PROD status cannot be verified; operation rejected";
+                return Core::ERROR_NONE;
             }
-            else
+
+            if (isProd)
             {
-#if defined(USE_IARMBUS) || defined(USE_IARM_BUS)
-                std::string error = "";
-                int return_value = v_secure_system("rm -rf /opt/drm /opt/www/whitebox /opt/www/authService && /rebootNow.sh -s WarehouseService &");
-                bool ok = return_value == 0;
-                successErr.success = ok;
-                if (!ok)
-                    // Coverity Fix: ID 68 - COPY_INSTEAD_OF_MOVE: Use std::move for assignment
-                    successErr.error = std::move(error);
-#else
-                response[PARAM_SUCCESS] = false;
-                successErr.error = "No IARMBUS";
-#endif
+                LOGWARN("InternalReset rejected: PROD build");
+                successErr.success = false;
+                successErr.error = "version is PROD";
+                return Core::ERROR_NONE;
             }
+
+            /* SECURITY: read the expected passphrase from a restricted file
+             * instead of comparing against a hardcoded string compiled into
+             * the binary.  The file (/opt/secure/warehouse_passphrase) must
+             * be provisioned by the platform with appropriate permissions
+             * (e.g. root-read-only). If the file is absent or empty the
+             * operation is unconditionally rejected. */
+            std::string expectedPassphrase;
+            if (!readPassphraseFromFile(expectedPassphrase))
+            {
+                LOGERR("InternalReset rejected: passphrase configuration unavailable");
+                successErr.success = false;
+                successErr.error = "passphrase configuration unavailable";
+                return Core::ERROR_NONE;
+            }
+
+            if (passPhrase.empty() || passPhrase != expectedPassphrase)
+            {
+                successErr.success = false;
+                successErr.error = "incorrect pass phrase";
+                return Core::ERROR_NONE;
+            }
+
+#if defined(USE_IARMBUS) || defined(USE_IARM_BUS)
+            std::string error = "";
+            int return_value = v_secure_system("rm -rf /opt/drm /opt/www/whitebox /opt/www/authService && /rebootNow.sh -s WarehouseService &");
+            bool ok = return_value == 0;
+            successErr.success = ok;
+            if (!ok)
+                // Coverity Fix: ID 68 - COPY_INSTEAD_OF_MOVE: Use std::move for assignment
+                successErr.error = std::move(error);
+#else
+            successErr.success = false;
+            successErr.error = "No IARMBUS";
+#endif
             return Core::ERROR_NONE;
         }
         
