@@ -1222,6 +1222,7 @@ TEST_F(Warehouse_L2Test, Security_InternalResetUntrustedFileAndProdGuard)
     ASSERT_EQ(0, chown(securityFiles.passphrase.c_str(), 1, 0));
     reject("passphrase configuration unavailable");
     ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));
+    ASSERT_EQ(0, chmod(securityFiles.version.c_str(), 0400)); // Otherwise trusted symlink target.
     ASSERT_EQ(0, symlink(securityFiles.version.c_str(), securityFiles.passphrase.c_str()));
     reject("passphrase configuration unavailable");
     ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));

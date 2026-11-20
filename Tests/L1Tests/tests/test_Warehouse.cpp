@@ -498,6 +498,7 @@ TEST_F(WarehouseInitializedTest, Security_InternalResetRejectsUntrustedFiles)
     ASSERT_EQ(0, chown(securityFiles.passphrase.c_str(), 1, 0));
     reject();
     ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));
+    ASSERT_EQ(0, chmod(securityFiles.version.c_str(), 0400)); // Otherwise trusted symlink target.
     ASSERT_EQ(0, symlink(securityFiles.version.c_str(), securityFiles.passphrase.c_str()));
     reject();
     ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));
