@@ -46,6 +46,12 @@ string(TOLOWER ${NAMESPACE} STORAGE_DIRECTORY)
 # for writing pc and config files
 include(CmakeHelperFunctions)
 
+# Test-only overrides are compiled out of production builds. Never enable these
+# options in a device image: they allow isolated temporary security fixtures.
+if(RDK_SERVICE_L2_TEST OR RDK_SERVICES_L1_TEST)
+    add_definitions(-DWAREHOUSE_SECURITY_TEST_PATHS)
+endif()
+
 if(RDK_SERVICE_L2_TEST)
     add_subdirectory(Tests/L2Tests)
 endif()

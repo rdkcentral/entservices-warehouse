@@ -21,6 +21,10 @@
 
 #include <algorithm>
 #include <fstream>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <cstdlib>
 #include "secure_wrapper.h"
 #include <regex.h>
 #include <regex>
@@ -101,15 +105,31 @@ namespace WPEFramework
     {
         static bool readPassphraseFromFile(std::string& passphrase)
         {
-            std::ifstream file(WAREHOUSE_PASSPHRASE_FILE);
-            if (!file.good())
+            const char* path = WAREHOUSE_PASSPHRASE_FILE;
+#ifdef WAREHOUSE_SECURITY_TEST_PATHS
+            // Compiled only into test builds; never accept path overrides on devices.
+            path = std::getenv("WAREHOUSE_TEST_PASSPHRASE_FILE");
+            if (!path) return false;
+#endif
+            // Validate the opened descriptor, not a path checked before opening:
+            // O_NOFOLLOW prevents symlinks and O_NONBLOCK avoids blocking on FIFOs.
+            const int fd = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
+            if (fd < 0) return false;
+            struct stat info;
+            const bool trusted = fstat(fd, &info) == 0 && S_ISREG(info.st_mode)
+                && info.st_uid == 0 && (info.st_mode & 07777 & ~0400) == 0;
+            if (!trusted)
             {
+                close(fd);
                 return false;
             }
-            if (!std::getline(file, passphrase))
-            {
-                return false;
-            }
+            passphrase.clear();
+            char ch;
+            ssize_t count;
+            while ((count = read(fd, &ch, 1)) == 1 && ch != '\n' && passphrase.size() < 4096)
+                passphrase.push_back(ch);
+            close(fd);
+            if (count < 0 || passphrase.size() >= 4096) return false;
             /* Strip trailing whitespace/newline */
             while (!passphrase.empty() &&
                    (passphrase.back() == '\n' || passphrase.back() == '\r' ||
@@ -118,15 +138,6 @@ namespace WPEFramework
                 passphrase.pop_back();
             }
             return !passphrase.empty();
-        }
-
-        static bool isValidResetType(const std::string& resetType)
-        {
-            return resetType == "COLD"
-                || resetType == "FACTORY"
-                || resetType == "USERFACTORY"
-                || resetType == "WAREHOUSE_CLEAR"
-                || resetType == "WAREHOUSE";
         }
 
         SERVICE_REGISTRATION(WarehouseImplementation, 1, 0);
@@ -276,7 +287,7 @@ namespace WPEFramework
                     error = "Reset failed";
                 }
             }
-            else if (resetType.compare("WAREHOUSE") == 0)
+            else // WAREHOUSE
             {
                 LOGINFO("WAREHOUSE reset...");
                 ret = suppressReboot ?  WarehouseImplementation::_instance->processWHResetNoReboot(): WarehouseImplementation::_instance->processWHReset();
@@ -286,13 +297,6 @@ namespace WPEFramework
                 else {
                     error = "Reset failed";
                 }
-            }
-            else
-            {
-                /* Should not be reachable — ResetDevice validates resetType
-                 * before dispatching to this function. */
-                LOGERR("WareHouseResetIARM: unexpected resetType '%s'", resetType.c_str());
-                error = "unrecognised resetType";
             }
 
             bool ok = true;
@@ -329,10 +333,15 @@ namespace WPEFramework
 
             /* SECURITY: check PROD status first — PROD builds must never allow
              * internalReset regardless of passphrase */
-            bool isProd = false;
-            if (0 == access(VERSION_FILE_NAME, R_OK))
+            bool isProd = true;
+            bool imageVerified = false;
+            const char* versionPath = VERSION_FILE_NAME;
+#ifdef WAREHOUSE_SECURITY_TEST_PATHS
+            versionPath = std::getenv("WAREHOUSE_TEST_VERSION_FILE");
+#endif
+            if (versionPath && 0 == access(versionPath, R_OK))
             {
-                std::ifstream file(VERSION_FILE_NAME);
+                std::ifstream file(versionPath);
 
                 LOGWARN("%s: attempt to open file '%s' for read mode with result %s", __FUNCTION__
                         , VERSION_FILE_NAME, file.good() ? "sucess" : "failure");
@@ -340,12 +349,20 @@ namespace WPEFramework
                 std::string line;
                 while(std::getline(file, line))
                 {
-                    if (line.find("imagename:") != std::string::npos)
+                    if (line.compare(0, 10, "imagename:") == 0)
                     {
-                        isProd = line.find("PROD") != std::string::npos;
+                        imageVerified = line.find_first_not_of(" \t\r", 10) != std::string::npos;
+                        isProd = line.find("PROD", 10) != std::string::npos;
                         break;
                     }
                 }
+            }
+
+            if (!imageVerified)
+            {
+                successErr.success = false;
+                successErr.error = "PROD status cannot be verified; operation rejected";
+                return Core::ERROR_NONE;
             }
 
             if (isProd)
@@ -693,30 +710,15 @@ namespace WPEFramework
         Core::hresult WarehouseImplementation::ResetDevice(const bool suppressReboot, const string& resetType, WarehouseSuccessErr& successErr)
         {
             LOGINFO("");
-
-            /* SECURITY: validate resetType against the known set.  Previously,
-             * any unrecognised value silently fell through to the WAREHOUSE
-             * reset branch, making it impossible to probe safely.
-             * Normalize empty resetType to WAREHOUSE to preserve backwards compatibility. */
-            string effectiveResetType = resetType.empty() ? "WAREHOUSE" : resetType;
-            if (!isValidResetType(effectiveResetType))
-            {
-                LOGERR("ResetDevice rejected: unrecognised resetType '%s'", resetType.c_str());
-                successErr.success = false;
-                successErr.error = "unrecognised resetType";
-                return Core::ERROR_NONE;
-            }
-
 #if defined(USE_IARMBUS) || defined(USE_IARM_BUS)
-            LOGWARN("Received request to reset device (type=%s, suppressReboot=%s)",
-                    effectiveResetType.c_str(), suppressReboot ? "true" : "false");
+            LOGWARN("Received request to reset device");
 
             try
             {
                 if (m_resetThread.get().joinable())
                     m_resetThread.get().join();
 
-                m_resetThread = Utils::ThreadRAII(std::thread(WareHouseResetIARM, this, suppressReboot, effectiveResetType));
+                m_resetThread = Utils::ThreadRAII(std::thread(WareHouseResetIARM, this, suppressReboot, resetType));
             }
             catch(const std::system_error& e)
             {

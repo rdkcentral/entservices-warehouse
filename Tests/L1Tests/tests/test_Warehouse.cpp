@@ -33,6 +33,7 @@
 #include "WorkerPoolImplementation.h"
 #include "COMLinkMock.h"
 #include <fstream>
+#include "../../InternalResetTestFiles.h"
 
 using namespace WPEFramework;
 
@@ -71,6 +72,7 @@ protected:
 
 class WarehouseInitializedTest : public WarehouseTest {
 protected:
+    InternalResetTestFiles securityFiles;
     IarmBusImplMock   *p_iarmBusImplMock = nullptr;
     WrapsImplMock     *p_wrapsImplMock   = nullptr;
     WarehouseMock     *p_warehouseMock   = nullptr;
@@ -248,7 +250,7 @@ TEST_F(WarehouseInitializedTest, GenericResetDevice)
                 return Core::ERROR_NONE;
             }));
 
-    // reset: suppress reboot: false (omitting resetType defaults to WAREHOUSE)
+    // reset: suppress reboot: false
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":false}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
 }
@@ -297,7 +299,7 @@ TEST_F(WarehouseInitializedTest, UserFactoryResetDeviceFailure)
                 return Core::ERROR_GENERAL;
             }));
 
-    // reset: suppress reboot: true (omitting resetType defaults to WAREHOUSE)
+    // reset: suppress reboot: true - This doesn't generate any event (Expect no response)
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
 }
@@ -306,11 +308,14 @@ TEST_F(WarehouseInitializedTest, internalResetFailPassPhrase)
 {
     /* Create the passphrase file so the "passphrase configuration unavailable"
      * path is not hit; we want to exercise the "incorrect pass phrase" path. */
-    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::File ppFile(securityFiles.passphrase);
     Core::Directory(ppFile.PathName().c_str()).CreatePath();
     ppFile.Create();
     const uint8_t ppContent[] = "CORRECT_SECRET\n";
     ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
+
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
 
     // Invoke internalReset - No pass phrase
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{}"), response));
@@ -328,11 +333,12 @@ TEST_F(WarehouseInitializedTest, internalResetFailPassPhrase)
 TEST_F(WarehouseInitializedTest, internalResetScriptFail)
 {
     /* Provision the passphrase file with the value that the test will send. */
-    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::File ppFile(securityFiles.passphrase);
     Core::Directory(ppFile.PathName().c_str()).CreatePath();
     ppFile.Create();
     const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
     ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
 
     EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
         .Times(1)
@@ -351,11 +357,12 @@ TEST_F(WarehouseInitializedTest, internalResetScriptFail)
 TEST_F(WarehouseInitializedTest, internalReset)
 {
     /* Provision the passphrase file with the value that the test will send. */
-    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::File ppFile(securityFiles.passphrase);
     Core::Directory(ppFile.PathName().c_str()).CreatePath();
     ppFile.Create();
     const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
     ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
 
     EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
         .Times(1)
@@ -441,14 +448,15 @@ TEST_F(WarehouseInitializedTest, isClean)
 
 /*
  * Security regression tests for entservices_Critical_010
- * RDKEMW-24481: Warehouse unauthenticated reset APIs
+ * RDKEMW-24481 ES-14 / RDKEMW-24489: InternalReset credential hardening
  */
 
 TEST_F(WarehouseInitializedTest, Security_InternalResetNoPassphraseFile)
 {
     /* When the passphrase file is absent, internalReset must be rejected
      * regardless of the passphrase supplied — even the old hardcoded one. */
-    std::remove("/opt/secure/warehouse_passphrase");
+    std::remove(securityFiles.passphrase.c_str());
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
     EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
@@ -459,11 +467,13 @@ TEST_F(WarehouseInitializedTest, Security_InternalResetHardcodedPassphraseReject
 {
     /* The old hardcoded passphrase must be rejected when the file contains
      * a different value. */
-    Core::File ppFile(_T("/opt/secure/warehouse_passphrase"));
+    Core::File ppFile(securityFiles.passphrase);
     Core::Directory(ppFile.PathName().c_str()).CreatePath();
     ppFile.Create();
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
     const uint8_t ppContent[] = "OPERATOR_PROVISIONED_SECRET\n";
     ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
 
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
     EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
@@ -472,45 +482,41 @@ TEST_F(WarehouseInitializedTest, Security_InternalResetHardcodedPassphraseReject
     ppFile.Destroy();
 }
 
-TEST_F(WarehouseInitializedTest, Security_ResetDeviceRejectsUnknownType)
+TEST_F(WarehouseInitializedTest, Security_InternalResetRejectsUntrustedFiles)
 {
-    /* An unrecognised resetType must be rejected instead of falling through
-     * to the destructive WAREHOUSE reset. */
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"EVIL_INJECTION\"}"), response));
-    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
-    EXPECT_THAT(response, ::testing::HasSubstr("unrecognised resetType"));
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+    const auto reject = [&]() {
+        EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"secret\"}"), response));
+        EXPECT_THAT(response, ::testing::HasSubstr("passphrase configuration unavailable"));
+    };
+    { std::ofstream file(securityFiles.passphrase); file << "secret\n"; }
+    for (const mode_t mode : {0600, 0440, 0404, 0500, 0444}) {
+        ASSERT_EQ(0, chmod(securityFiles.passphrase.c_str(), mode));
+        reject();
+    }
+    ASSERT_EQ(0, chmod(securityFiles.passphrase.c_str(), 0400));
+    ASSERT_EQ(0, chown(securityFiles.passphrase.c_str(), 1, 0));
+    reject();
+    ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));
+    ASSERT_EQ(0, symlink(securityFiles.version.c_str(), securityFiles.passphrase.c_str()));
+    reject();
+    ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));
+    ASSERT_EQ(0, mkfifo(securityFiles.passphrase.c_str(), 0400));
+    reject();
 }
 
-TEST_F(WarehouseInitializedTest, Security_ResetDeviceDefaultsToWarehouse)
+TEST_F(WarehouseInitializedTest, Security_InternalResetProdGuardFailsClosed)
 {
-    /* Omitting resetType defaults to WAREHOUSE for backwards compatibility.
-     * This test verifies the normalization. */
-    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
-        .Times(1)
-        .WillOnce(::testing::Invoke(
-            [](const char* command, va_list args) {
-                EXPECT_EQ(string(command), string("sh /lib/rdk/deviceReset.sh warehouse --suppressReboot &"));
-                return Core::ERROR_NONE;
-            }));
-
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true}"), response));
-    EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
-}
-
-TEST_F(WarehouseInitializedTest, Security_ResetDeviceAcceptsValidTypes)
-{
-    /* Valid reset types must still be accepted.  We only test one to avoid
-     * actually executing destructive scripts — the mock intercepts them. */
-    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
-        .Times(1)
-        .WillOnce(::testing::Invoke(
-            [](const char* command, va_list args) {
-                EXPECT_EQ(string(command), string("sh /lib/rdk/deviceReset.sh factory"));
-                return Core::ERROR_NONE;
-            }));
-
-    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("resetDevice"), _T("{\"suppressReboot\":true,\"resetType\":\"FACTORY\"}"), response));
-    EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+    for (const std::string image : {"", "other:value\n", "imagename:   \n", "imagename:WAREHOUSE_PROD\n"}) {
+        securityFiles.setVersion(image);
+        EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{}"), response));
+        EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+        EXPECT_THAT(response, ::testing::Not(::testing::HasSubstr("passphrase configuration unavailable")));
+    }
+    ASSERT_EQ(0, std::remove(securityFiles.version.c_str()));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("PROD status cannot be verified"));
 }
 
 extern "C" FILE* __real_popen(const char* command, const char* type);
