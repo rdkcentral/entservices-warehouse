@@ -39,12 +39,11 @@ cmake -G Ninja -S "$GITHUB_WORKSPACE" -B build/entservices-warehouse \
 -DCMAKE_DISABLE_FIND_PACKAGE_RBus=ON \
 -DCOMCAST_CONFIG=OFF \
 -DRDK_SERVICES_COVERITY=ON \
--DDS_FOUND=ON \
+-DIARMBUS_FOUND=ON \
 -DPLUGIN_WAREHOUSE=ON \
 -DCMAKE_CXX_FLAGS="-DEXCEPTIONS_ENABLE=ON \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/headers \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/headers/audiocapturemgr \
--I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/headers/rdk/ds \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/headers/rdk/iarmbus \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/headers/rdk/iarmmgrs-hal \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/headers/ccec/drivers \
@@ -53,7 +52,6 @@ cmake -G Ninja -S "$GITHUB_WORKSPACE" -B build/entservices-warehouse \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/thunder \
 -I ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/devicesettings \
 -I /usr/include/libdrm \
--include ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/devicesettings.h \
 -include ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/Iarm.h \
 -include ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/Rfc.h \
 -include ${GITHUB_WORKSPACE}/entservices-testframework/Tests/mocks/RBus.h \
