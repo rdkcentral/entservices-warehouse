@@ -48,5 +48,6 @@ public:
         rmdir(directory.c_str());
         unsetenv("WAREHOUSE_TEST_PASSPHRASE_FILE");
         unsetenv("WAREHOUSE_TEST_VERSION_FILE");
+        unsetenv("WAREHOUSE_TEST_TRUSTED_UID");
     }
 };

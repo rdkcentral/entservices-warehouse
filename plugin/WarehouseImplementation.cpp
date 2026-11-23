@@ -110,6 +110,11 @@ namespace WPEFramework
             // Compiled only into test builds; never accept path overrides on devices.
             path = std::getenv("WAREHOUSE_TEST_PASSPHRASE_FILE");
             if (!path) return false;
+            // Test builds run unprivileged: trust the runner's uid unless a test overrides it.
+            const char* uidOverride = std::getenv("WAREHOUSE_TEST_TRUSTED_UID");
+            const uid_t trustedUid = uidOverride ? static_cast<uid_t>(std::strtoul(uidOverride, nullptr, 10)) : geteuid();
+#else
+            const uid_t trustedUid = 0;
 #endif
             // Validate the opened descriptor, not a path checked before opening:
             // O_NOFOLLOW prevents symlinks and O_NONBLOCK avoids blocking on FIFOs.
@@ -117,7 +122,7 @@ namespace WPEFramework
             if (fd < 0) return false;
             struct stat info;
             const bool trusted = fstat(fd, &info) == 0 && S_ISREG(info.st_mode)
-                && info.st_uid == 0 && (info.st_mode & 07777 & ~0400) == 0;
+                && info.st_uid == trustedUid && (info.st_mode & 07777 & ~0400) == 0;
             if (!trusted)
             {
                 close(fd);
