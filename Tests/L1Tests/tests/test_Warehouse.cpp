@@ -33,6 +33,7 @@
 #include "WorkerPoolImplementation.h"
 #include "COMLinkMock.h"
 #include <fstream>
+#include "../../InternalResetTestFiles.h"
 
 using namespace WPEFramework;
 
@@ -71,6 +72,7 @@ protected:
 
 class WarehouseInitializedTest : public WarehouseTest {
 protected:
+    InternalResetTestFiles securityFiles;
     IarmBusImplMock   *p_iarmBusImplMock = nullptr;
     WrapsImplMock     *p_wrapsImplMock   = nullptr;
     WarehouseMock     *p_warehouseMock   = nullptr;
@@ -304,15 +306,40 @@ TEST_F(WarehouseInitializedTest, UserFactoryResetDeviceFailure)
 
 TEST_F(WarehouseInitializedTest, internalResetFailPassPhrase)
 {
+    /* Create the passphrase file so the "passphrase configuration unavailable"
+     * path is not hit; we want to exercise the "incorrect pass phrase" path. */
+    Core::File ppFile(securityFiles.passphrase);
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "CORRECT_SECRET\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
+
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+
     // Invoke internalReset - No pass phrase
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{}"), response));
 
     // Invoke internalReset - Incorrect pass phrase
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"Test Phrase\"}"), response));
+
+    // Invoke internalReset - Old hardcoded passphrase must no longer work
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+
+    ppFile.Destroy();
 }
 
 TEST_F(WarehouseInitializedTest, internalResetScriptFail)
 {
+    /* Provision the passphrase file with the value that the test will send. */
+    Core::File ppFile(securityFiles.passphrase);
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
+
     EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
         .Times(1)
         .WillOnce(::testing::Invoke(
@@ -323,10 +350,20 @@ TEST_F(WarehouseInitializedTest, internalResetScriptFail)
     // Invoke internalReset - Correct pass phrase - Return error
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
+
+    ppFile.Destroy();
 }
 
 TEST_F(WarehouseInitializedTest, internalReset)
 {
+    /* Provision the passphrase file with the value that the test will send. */
+    Core::File ppFile(securityFiles.passphrase);
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
+
     EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
         .Times(1)
         .WillOnce(::testing::Invoke(
@@ -338,6 +375,8 @@ TEST_F(WarehouseInitializedTest, internalReset)
     // Invoke internalReset - Correct pass phrase - Return success
     EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
     EXPECT_EQ(response, _T("{\"success\":true,\"error\":\"\"}"));
+
+    ppFile.Destroy();
 }
 
 TEST_F(WarehouseInitializedTest, lightResetScriptFail)
@@ -405,6 +444,80 @@ TEST_F(WarehouseInitializedTest, isClean)
 
     fileConf.Destroy();
     filePref.Destroy();
+}
+
+/*
+ * Security regression tests for entservices_Critical_010
+ * RDKEMW-24481 ES-14 / RDKEMW-24489: InternalReset credential hardening
+ */
+
+TEST_F(WarehouseInitializedTest, Security_InternalResetNoPassphraseFile)
+{
+    /* When the passphrase file is absent, internalReset must be rejected
+     * regardless of the passphrase supplied — even the old hardcoded one. */
+    std::remove(securityFiles.passphrase.c_str());
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+    EXPECT_THAT(response, ::testing::HasSubstr("passphrase configuration unavailable"));
+}
+
+TEST_F(WarehouseInitializedTest, Security_InternalResetHardcodedPassphraseRejected)
+{
+    /* The old hardcoded passphrase must be rejected when the file contains
+     * a different value. */
+    Core::File ppFile(securityFiles.passphrase);
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+    const uint8_t ppContent[] = "OPERATOR_PROVISIONED_SECRET\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
+
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"FOR TEST PURPOSES ONLY\"}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+    EXPECT_THAT(response, ::testing::HasSubstr("incorrect pass phrase"));
+
+    ppFile.Destroy();
+}
+
+TEST_F(WarehouseInitializedTest, Security_InternalResetRejectsUntrustedFiles)
+{
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+    const auto reject = [&]() {
+        EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{\"passPhrase\":\"secret\"}"), response));
+        EXPECT_THAT(response, ::testing::HasSubstr("passphrase configuration unavailable"));
+    };
+    { std::ofstream file(securityFiles.passphrase); file << "secret\n"; }
+    for (const mode_t mode : {0600, 0440, 0404, 0500, 0444}) {
+        ASSERT_EQ(0, chmod(securityFiles.passphrase.c_str(), mode));
+        reject();
+    }
+    ASSERT_EQ(0, chmod(securityFiles.passphrase.c_str(), 0400));
+    setenv("WAREHOUSE_TEST_TRUSTED_UID", std::to_string(geteuid() + 1).c_str(), 1);
+    reject();
+    ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));
+    ASSERT_EQ(0, chmod(securityFiles.version.c_str(), 0400)); // Otherwise trusted symlink target.
+    ASSERT_EQ(0, symlink(securityFiles.version.c_str(), securityFiles.passphrase.c_str()));
+    reject();
+    ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));
+    ASSERT_EQ(0, mkfifo(securityFiles.passphrase.c_str(), 0400));
+    reject();
+}
+
+TEST_F(WarehouseInitializedTest, Security_InternalResetProdGuardFailsClosed)
+{
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+    for (const std::string image : {"", "other:value\n", "imagename:   \n", "imagename:WAREHOUSE_PROD\n"}) {
+        securityFiles.setVersion(image);
+        EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{}"), response));
+        EXPECT_THAT(response, ::testing::HasSubstr("\"success\":false"));
+        EXPECT_THAT(response, ::testing::Not(::testing::HasSubstr("passphrase configuration unavailable")));
+    }
+    ASSERT_EQ(0, std::remove(securityFiles.version.c_str()));
+    EXPECT_EQ(Core::ERROR_NONE, handler.Invoke(connection, _T("internalReset"), _T("{}"), response));
+    EXPECT_THAT(response, ::testing::HasSubstr("PROD status cannot be verified"));
 }
 
 extern "C" FILE* __real_popen(const char* command, const char* type);

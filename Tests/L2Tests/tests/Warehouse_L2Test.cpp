@@ -21,6 +21,7 @@
 #include "L2TestsMock.h"
 #include <condition_variable>
 #include <fstream>
+#include "../../InternalResetTestFiles.h"
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <interfaces/IWarehouse.h>
@@ -111,6 +112,7 @@ public:
 /* WareHouse L2 test class declaration */
 class Warehouse_L2Test : public L2TestMocks {
 protected:
+    InternalResetTestFiles securityFiles;
     Core::JSONRPC::Message message;
     string response;
     IARM_EventHandler_t whMgrStatusChangeEventsHandler = nullptr;
@@ -477,6 +479,17 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_internalReset)
     string passphrase;
     Exchange::IWarehouse::WarehouseSuccessErr response;
 
+    /* Create the passphrase file so the "passphrase configuration unavailable"
+     * path is not hit; we want to exercise the "incorrect pass phrase" path. */
+    Core::File ppFile(securityFiles.passphrase);
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
+
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+
     // Invoke internalReset - No pass phrase
     status = m_warehouseplugin->InternalReset(passphrase, response);
     EXPECT_EQ(Core::ERROR_NONE, status);
@@ -488,6 +501,7 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_internalReset)
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_FALSE(response.success);
 
+    ::testing::Mock::VerifyAndClearExpectations(p_wrapsImplMock);
     EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
         .Times(2)
         .WillOnce(::testing::Invoke(
@@ -511,6 +525,8 @@ TEST_F(Warehouse_L2Test, COMRPC_Warehouse_internalReset)
     status = m_warehouseplugin->InternalReset(passphrase, response);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(response.success);
+
+    ppFile.Destroy();
 }
 
 /********************************************************
@@ -526,6 +542,16 @@ TEST_F(Warehouse_L2Test, Warehouse_internalReset)
     JsonObject params;
     JsonObject result;
 
+    /* Provision the passphrase file with the value that the test will send. */
+    Core::File ppFile(securityFiles.passphrase);
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    const uint8_t ppContent[] = "FOR TEST PURPOSES ONLY\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
+
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+
     // Invoke internalReset - No pass phrase
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
@@ -537,6 +563,7 @@ TEST_F(Warehouse_L2Test, Warehouse_internalReset)
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_FALSE(result["success"].Boolean());
 
+    ::testing::Mock::VerifyAndClearExpectations(p_wrapsImplMock);
     EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_))
         .Times(2)
         .WillOnce(::testing::Invoke(
@@ -560,6 +587,8 @@ TEST_F(Warehouse_L2Test, Warehouse_internalReset)
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
     EXPECT_EQ(Core::ERROR_NONE, status);
     EXPECT_TRUE(result["success"].Boolean());
+
+    ppFile.Destroy();
 }
 
 /********************************************************
@@ -1147,4 +1176,90 @@ TEST_F(Warehouse_L2Test, Warehouse_UserFactory_ResetDevice_Failure)
     params["resetType"] = "";
     status = InvokeServiceMethod("org.rdk.Warehouse.1", "resetDevice", params, result);
     EXPECT_TRUE(result["success"].Boolean());
+}
+
+/*
+ * Security regression tests for entservices_Critical_010
+ * RDKEMW-24481 ES-14 / RDKEMW-24489: InternalReset credential hardening
+ */
+
+TEST_F(Warehouse_L2Test, Security_InternalResetNoPassphraseFile)
+{
+    /* When the passphrase file is absent, internalReset must be rejected
+     * regardless of the passphrase supplied — even the old hardcoded one. */
+    std::remove(securityFiles.passphrase.c_str());
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+
+    JSONRPC::LinkType<Core::JSON::IElement> jsonrpc(WAREHOUSE_CALLSIGN, WAREHOUSEL2TEST_CALLSIGN);
+    uint32_t status = Core::ERROR_GENERAL;
+    JsonObject params;
+    JsonObject result;
+
+    params["passPhrase"] = "FOR TEST PURPOSES ONLY";
+    status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_FALSE(result["success"].Boolean());
+    EXPECT_THAT(result["error"].String(), ::testing::HasSubstr("passphrase configuration unavailable"));
+}
+
+TEST_F(Warehouse_L2Test, Security_InternalResetUntrustedFileAndProdGuard)
+{
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+    JsonObject params;
+    params["passPhrase"] = "secret";
+    const auto reject = [&](const char* error) {
+        JsonObject result;
+        EXPECT_EQ(Core::ERROR_NONE, InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result));
+        EXPECT_FALSE(result["success"].Boolean());
+        EXPECT_THAT(result["error"].String(), ::testing::HasSubstr(error));
+    };
+    { std::ofstream file(securityFiles.passphrase); file << "secret\n"; }
+    for (const mode_t mode : {0600, 0440, 0404, 0500, 0444}) {
+        ASSERT_EQ(0, chmod(securityFiles.passphrase.c_str(), mode));
+        reject("passphrase configuration unavailable");
+    }
+    ASSERT_EQ(0, chmod(securityFiles.passphrase.c_str(), 0400));
+    setenv("WAREHOUSE_TEST_TRUSTED_UID", std::to_string(geteuid() + 1).c_str(), 1);
+    reject("passphrase configuration unavailable");
+    ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));
+    ASSERT_EQ(0, chmod(securityFiles.version.c_str(), 0400)); // Otherwise trusted symlink target.
+    ASSERT_EQ(0, symlink(securityFiles.version.c_str(), securityFiles.passphrase.c_str()));
+    reject("passphrase configuration unavailable");
+    ASSERT_EQ(0, std::remove(securityFiles.passphrase.c_str()));
+    ASSERT_EQ(0, mkfifo(securityFiles.passphrase.c_str(), 0400));
+    reject("passphrase configuration unavailable");
+    for (const std::string image : {"", "other:value\n", "imagename: \n"}) {
+        securityFiles.setVersion(image);
+        reject("PROD status cannot be verified");
+    }
+    securityFiles.setVersion("imagename:WAREHOUSE_PROD\n");
+    reject("version is PROD");
+    ASSERT_EQ(0, std::remove(securityFiles.version.c_str()));
+    reject("PROD status cannot be verified");
+}
+
+TEST_F(Warehouse_L2Test, Security_InternalResetHardcodedPassphraseRejected)
+{
+    /* The old hardcoded passphrase must be rejected when the file contains
+     * a different value. */
+    Core::File ppFile(securityFiles.passphrase);
+    Core::Directory(ppFile.PathName().c_str()).CreatePath();
+    ppFile.Create();
+    EXPECT_CALL(*p_wrapsImplMock, v_secure_system(::testing::_, ::testing::_)).Times(0);
+    const uint8_t ppContent[] = "OPERATOR_PROVISIONED_SECRET\n";
+    ppFile.Write(ppContent, sizeof(ppContent) - 1);
+    securityFiles.trustPassphrase();
+
+    JSONRPC::LinkType<Core::JSON::IElement> jsonrpc(WAREHOUSE_CALLSIGN, WAREHOUSEL2TEST_CALLSIGN);
+    uint32_t status = Core::ERROR_GENERAL;
+    JsonObject params;
+    JsonObject result;
+
+    params["passPhrase"] = "FOR TEST PURPOSES ONLY";
+    status = InvokeServiceMethod("org.rdk.Warehouse.1", "internalReset", params, result);
+    EXPECT_EQ(Core::ERROR_NONE, status);
+    EXPECT_FALSE(result["success"].Boolean());
+    EXPECT_THAT(result["error"].String(), ::testing::HasSubstr("incorrect pass phrase"));
+
+    ppFile.Destroy();
 }
